@@ -31,7 +31,7 @@ if (!$note) {
   exit('Note not found.');
 }
 
-/* Prices (buyer pays price + fee) */
+/* ===================== Pricing ===================== */
 $price_cents = (int)$note['price_cents'];       // seller's listed price
 $fee_cents   = fee_5pct($price_cents);          // 5% platform fee
 $total_cents = $price_cents + $fee_cents;       // buyer total
@@ -40,36 +40,42 @@ $price_rs = number_format($price_cents / 100, 2);
 $fee_rs   = number_format($fee_cents   / 100, 2);
 $total_rs = number_format($total_cents / 100, 2);
 
-/* Build a safe file URL for preview + existence check */
+/* ===================== File URL & Existence ===================== */
+/**
+ * We support three shapes of n.file_path:
+ *  1) Full URL:            https://.../file.pdf            -> use as-is
+ *  2) Absolute web path:   /uploads/file.pdf               -> use as-is
+ *  3) Bare filename:       file.pdf                        -> serve from /pages/uploads/file.pdf
+ *
+ * Adjust $UPLOAD_DIR and $UPLOAD_WEB if your storage differs.
+ */
 $raw_fp = trim((string)($note['file_path'] ?? ''));
 
-// 1) Where your uploads are on disk and on the web.
-// Adjust these two if your structure is different.
-$UPLOAD_DIR  = realpath(__DIR__ . '/uploads');        // e.g. .../pages/uploads
-$UPLOAD_WEB  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/') . '/uploads/'; // e.g. /pages/uploads/
+// Where uploads live on disk and on the web:
+$UPLOAD_DIR = realpath(__DIR__ . '/uploads');  // e.g. [project]/pages/uploads
+$scriptDir  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/'); // e.g. /pages
+$UPLOAD_WEB = $scriptDir . '/uploads/';                     // e.g. /pages/uploads/
 
-// 2) Decide the web URL to use in the iframe
+// Build the public URL:
 if ($raw_fp === '') {
   $file_url = '';
 } elseif (preg_match('#^https?://#i', $raw_fp) || str_starts_with($raw_fp, '/')) {
-  // already a full URL or absolute path under web root
+  // Full URL or absolute path already
   $file_url = $raw_fp;
 } else {
-  // treat as a filename inside /pages/uploads
-  // (if your files are actually elsewhere, point $UPLOAD_DIR / $UPLOAD_WEB there)
+  // Treat as a filename under /pages/uploads
   $file_url = $UPLOAD_WEB . rawurlencode($raw_fp);
 }
 
-// 3) Check file existence (only for local uploads path + filename case)
+// Check file existence if it's the local uploads case
 $exists_on_disk = false;
 if ($raw_fp !== '' && is_dir($UPLOAD_DIR)) {
   $disk_candidate = $UPLOAD_DIR . DIRECTORY_SEPARATOR . $raw_fp;
   $exists_on_disk = file_exists($disk_candidate);
 }
 
-// 4) Normalize extension for preview check
+// Normalize extension for preview check
 $ext = strtolower((string)($note['ext'] ?? ''));
-
 
 /* Page title for header */
 $title = "Note • " . htmlspecialchars($note['title']);
@@ -116,7 +122,7 @@ include __DIR__ . '/header.php';
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
     <!-- Main Content -->
     <div class="lg:col-span-2">
-      <!-- Title + Info (no description here) -->
+      <!-- Title + Info (description moved below preview) -->
       <div class="bg-white shadow rounded-lg p-6 mb-6">
         <div class="flex justify-between items-start">
           <div>
@@ -125,7 +131,7 @@ include __DIR__ . '/header.php';
                 <?= htmlspecialchars($note['school_name']) ?>
               </span>
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                <?= strtoupper(htmlspecialchars($note['ext'] ?: 'PDF')) ?>
+                <?= strtoupper(htmlspecialchars($ext ?: 'PDF')) ?>
               </span>
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                 <?= htmlspecialchars($note['level_name']) ?>
@@ -156,39 +162,34 @@ include __DIR__ . '/header.php';
         <div class="p-6">
           <div id="preview" class="tab-content active">
             <?php if ($ext === 'pdf' && $file_url && $exists_on_disk): ?>
-              <?php else: ?>
-              <div class="border border-dashed border-gray-300 rounded-lg p-6 text-sm text-gray-600">
-                <?php if ($ext !== 'pdf'): ?>
-                  Preview is available for PDF files only. This file is <strong><?= strtoupper(htmlspecialchars($ext ?: 'N/A')) ?></strong>.
-                <?php elseif (!$file_url || !$exists_on_disk): ?>
-                  We couldn’t find the file to preview. Make sure the file is uploaded to <code>/pages/uploads</code> and the
-                  database <code>file_path</code> matches the filename (e.g. <code>note_abc.pdf</code>).
-                <?php endif; ?>
-              </div>
-
-              <!-- Simple preview: show first 3 pages using the browser PDF viewer -->
+              <!-- Show first 3 pages via browser PDF viewer -->
               <div class="space-y-4">
                 <div class="rounded border border-gray-200 overflow-hidden">
-                  <iframe src="<?= $file_url ?>#page=1&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
+                  <iframe src="<?= htmlspecialchars($file_url) ?>#page=1&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
                 </div>
                 <div class="rounded border border-gray-200 overflow-hidden">
-                  <iframe src="<?= $file_url ?>#page=2&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
+                  <iframe src="<?= htmlspecialchars($file_url) ?>#page=2&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
                 </div>
                 <div class="rounded border border-gray-200 overflow-hidden">
-                  <iframe src="<?= $file_url ?>#page=3&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
+                  <iframe src="<?= htmlspecialchars($file_url) ?>#page=3&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
                 </div>
               </div>
               <p class="mt-3 text-xs text-gray-500">Preview shows only the first 3 pages. Full document available after purchase.</p>
             <?php else: ?>
               <div class="border border-dashed border-gray-300 rounded-lg p-6 text-sm text-gray-600">
-                Preview is available for PDF files only. This file is <strong><?= strtoupper(htmlspecialchars($note['ext'])) ?></strong>.
+                <?php if ($ext !== 'pdf'): ?>
+                  Preview is available for PDF files only. This file is <strong><?= strtoupper(htmlspecialchars($ext ?: 'N/A')) ?></strong>.
+                <?php elseif (!$file_url || !$exists_on_disk): ?>
+                  We couldn’t find the file to preview. Ensure the file exists in <code>/pages/uploads</code> and
+                  <code>notes.file_path</code> matches its filename (e.g. <code>note_abc.pdf</code>), or provide a full URL.
+                <?php endif; ?>
               </div>
             <?php endif; ?>
           </div>
         </div>
       </div>
 
-      <!-- Description (moved here, after preview) -->
+      <!-- Description (after preview) -->
       <div class="bg-white shadow rounded-lg p-6 mb-6">
         <h3 class="text-lg font-medium text-gray-900 mb-3">Description</h3>
         <div class="prose prose-sm max-w-none text-gray-700">
@@ -304,7 +305,7 @@ include __DIR__ . '/header.php';
         <h3 class="mt-4 text-lg font-medium text-gray-900">Purchase Successful!</h3>
         <p class="mt-2 text-sm text-gray-500">Your material has been purchased and is now available for download.</p>
         <div class="mt-6">
-          <a href="<?= $file_url ?>" class="inline-flex justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+          <a href="<?= htmlspecialchars($file_url) ?>" class="inline-flex justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
             Download Material
           </a>
         </div>
