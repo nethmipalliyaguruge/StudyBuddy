@@ -41,33 +41,23 @@ $fee_rs   = number_format($fee_cents   / 100, 2);
 $total_rs = number_format($total_cents / 100, 2);
 
 /* ===================== File URL & Existence ===================== */
-/**
- * We support three shapes of n.file_path:
- *  1) Full URL:            https://.../file.pdf            -> use as-is
- *  2) Absolute web path:   /uploads/file.pdf               -> use as-is
- *  3) Bare filename:       file.pdf                        -> serve from /pages/uploads/file.pdf
- *
- * Adjust $UPLOAD_DIR and $UPLOAD_WEB if your storage differs.
- */
 $raw_fp = trim((string)($note['file_path'] ?? ''));
 
 // Where uploads live on disk and on the web:
-$UPLOAD_DIR = realpath(__DIR__ . '/uploads');  // e.g. [project]/pages/uploads
-$scriptDir  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/'); // e.g. /pages
-$UPLOAD_WEB = $scriptDir . '/uploads/';                     // e.g. /pages/uploads/
+$UPLOAD_DIR = realpath(__DIR__ . '/uploads');
+$scriptDir  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+$UPLOAD_WEB = $scriptDir . '/uploads/';
 
 // Build the public URL:
 if ($raw_fp === '') {
   $file_url = '';
 } elseif (preg_match('#^https?://#i', $raw_fp) || str_starts_with($raw_fp, '/')) {
-  // Full URL or absolute path already
   $file_url = $raw_fp;
 } else {
-  // Treat as a filename under /pages/uploads
   $file_url = $UPLOAD_WEB . rawurlencode($raw_fp);
 }
 
-// Check file existence if it's the local uploads case
+// Check file existence
 $exists_on_disk = false;
 if ($raw_fp !== '' && is_dir($UPLOAD_DIR)) {
   $disk_candidate = $UPLOAD_DIR . DIRECTORY_SEPARATOR . $raw_fp;
@@ -83,7 +73,6 @@ include __DIR__ . '/header.php';
 ?>
 
 <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
   <!-- Breadcrumb -->
   <nav class="flex mb-6" aria-label="Breadcrumb">
     <ol class="flex items-center space-x-4">
@@ -122,7 +111,7 @@ include __DIR__ . '/header.php';
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
     <!-- Main Content -->
     <div class="lg:col-span-2">
-      <!-- Title + Info (description moved below preview) -->
+      <!-- Title + Info -->
       <div class="bg-white shadow rounded-lg p-6 mb-6">
         <div class="flex justify-between items-start">
           <div>
@@ -161,35 +150,83 @@ include __DIR__ . '/header.php';
 
         <div class="p-6">
           <div id="preview" class="tab-content active">
-            <?php if ($ext === 'pdf' && $file_url && $exists_on_disk): ?>
-              <!-- Show first 3 pages via browser PDF viewer -->
-              <div class="space-y-4">
-                <div class="rounded border border-gray-200 overflow-hidden">
-                  <iframe src="<?= htmlspecialchars($file_url) ?>#page=1&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
+            <?php if ($file_url && $exists_on_disk): ?>
+              <?php if ($ext === 'pdf'): ?>
+                <!-- Secure PDF Preview -->
+                <div class="space-y-4">
+                  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                    <div class="flex items-center">
+                      <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
+                      <span class="text-sm text-yellow-800">Preview shows only the first 3 pages. Full document available after purchase.</span>
+                    </div>
+                  </div>
+                  
+                  <!-- Preview Images Container -->
+                  <div id="pdfPreviewContainer" class="space-y-4">
+                    <div class="text-center py-8">
+                      <i class="fas fa-spinner fa-spin text-2xl text-gray-400 mb-2"></i>
+                      <p class="text-gray-500">Loading preview...</p>
+                    </div>
+                  </div>
                 </div>
-                <div class="rounded border border-gray-200 overflow-hidden">
-                  <iframe src="<?= htmlspecialchars($file_url) ?>#page=2&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
+
+              <?php elseif (in_array($ext, ['doc','docx'])): ?>
+                <!-- Word Document Preview -->
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                  <div class="flex items-center">
+                    <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
+                    <span class="text-sm text-yellow-800">Limited preview available. Full document accessible after purchase.</span>
+                  </div>
                 </div>
-                <div class="rounded border border-gray-200 overflow-hidden">
-                  <iframe src="<?= htmlspecialchars($file_url) ?>#page=3&zoom=page-width" class="w-full" style="height: 480px;"></iframe>
+                <div class="border border-gray-300 rounded-lg overflow-hidden bg-gray-50 relative">
+                  <div class="absolute inset-0 bg-white bg-opacity-90 z-10 flex items-center justify-center">
+                    <div class="text-center">
+                      <i class="fas fa-file-word text-4xl text-blue-600 mb-4"></i>
+                      <h4 class="text-lg font-medium text-gray-900 mb-2">Word Document Preview</h4>
+                      <p class="text-sm text-gray-600 mb-4">This is a Microsoft Word document</p>
+                      <p class="text-xs text-gray-500">Full content available after purchase</p>
+                    </div>
+                  </div>
+                  <div style="height: 400px;" class="bg-white"></div>
                 </div>
-              </div>
-              <p class="mt-3 text-xs text-gray-500">Preview shows only the first 3 pages. Full document available after purchase.</p>
+
+              <?php elseif (in_array($ext, ['ppt','pptx'])): ?>
+                <!-- PowerPoint Preview -->
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                  <div class="flex items-center">
+                    <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
+                    <span class="text-sm text-yellow-800">Limited preview available. Full presentation accessible after purchase.</span>
+                  </div>
+                </div>
+                <div class="border border-gray-300 rounded-lg overflow-hidden bg-gray-50 relative">
+                  <div class="absolute inset-0 bg-white bg-opacity-90 z-10 flex items-center justify-center">
+                    <div class="text-center">
+                      <i class="fas fa-file-powerpoint text-4xl text-orange-600 mb-4"></i>
+                      <h4 class="text-lg font-medium text-gray-900 mb-2">PowerPoint Presentation</h4>
+                      <p class="text-sm text-gray-600 mb-4">This is a Microsoft PowerPoint presentation</p>
+                      <p class="text-xs text-gray-500">Full slides available after purchase</p>
+                    </div>
+                  </div>
+                  <div style="height: 400px;" class="bg-white"></div>
+                </div>
+
+              <?php else: ?>
+                <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <i class="fas fa-file text-4xl text-gray-400 mb-4"></i>
+                  <p class="text-sm text-gray-600">Preview not available for this file type (<?= strtoupper(htmlspecialchars($ext)) ?>).</p>
+                  <p class="text-xs text-gray-500 mt-2">Full document available after purchase.</p>
+                </div>
+              <?php endif; ?>
             <?php else: ?>
               <div class="border border-dashed border-gray-300 rounded-lg p-6 text-sm text-gray-600">
-                <?php if ($ext !== 'pdf'): ?>
-                  Preview is available for PDF files only. This file is <strong><?= strtoupper(htmlspecialchars($ext ?: 'N/A')) ?></strong>.
-                <?php elseif (!$file_url || !$exists_on_disk): ?>
-                  We couldn’t find the file to preview. Ensure the file exists in <code>/pages/uploads</code> and
-                  <code>notes.file_path</code> matches its filename (e.g. <code>note_abc.pdf</code>), or provide a full URL.
-                <?php endif; ?>
+                File not found. Please contact support.
               </div>
             <?php endif; ?>
           </div>
         </div>
       </div>
 
-      <!-- Description (after preview) -->
+      <!-- Description -->
       <div class="bg-white shadow rounded-lg p-6 mb-6">
         <h3 class="text-lg font-medium text-gray-900 mb-3">Description</h3>
         <div class="prose prose-sm max-w-none text-gray-700">
@@ -315,12 +352,90 @@ include __DIR__ . '/header.php';
 </div>
 
 <script>
+// Secure PDF Preview System
+<?php if ($ext === 'pdf' && $file_url && $exists_on_disk): ?>
+document.addEventListener('DOMContentLoaded', function() {
+    loadPDFPreview('<?= htmlspecialchars($file_url) ?>', <?= $note_id ?>);
+});
+
+function loadPDFPreview(fileUrl, noteId) {
+    // Use server-side preview generator
+    fetch('preview.php?id=' + noteId + '&type=pdf')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('pdfPreviewContainer');
+            
+            if (data.success && data.previews) {
+                container.innerHTML = '';
+                data.previews.forEach((preview, index) => {
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = 'border border-gray-200 rounded-lg overflow-hidden bg-white relative';
+                    
+                    pageDiv.innerHTML = `
+                        <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs">
+                            Page ${index + 1}
+                        </div>
+                        <div class="absolute top-2 right-2 bg-red-100 text-red-800 px-2 py-1 rounded text-xs">
+                            Preview Only
+                        </div>
+                        <img src="${preview}" alt="Page ${index + 1}" class="w-full h-auto max-h-96 object-contain">
+                        <div class="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent pointer-events-none"></div>
+                    `;
+                    
+                    container.appendChild(pageDiv);
+                });
+            } else {
+                container.innerHTML = `
+                    <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <i class="fas fa-exclamation-triangle text-4xl text-yellow-500 mb-4"></i>
+                        <p class="text-sm text-gray-600">Preview could not be loaded.</p>
+                        <p class="text-xs text-gray-500 mt-2">Full document available after purchase.</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading preview:', error);
+            document.getElementById('pdfPreviewContainer').innerHTML = `
+                <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <i class="fas fa-exclamation-triangle text-4xl text-yellow-500 mb-4"></i>
+                    <p class="text-sm text-gray-600">Preview could not be loaded.</p>
+                    <p class="text-xs text-gray-500 mt-2">Full document available after purchase.</p>
+                </div>
+            `;
+        });
+}
+<?php endif; ?>
+
+// Disable right-click and keyboard shortcuts on preview
+document.addEventListener('contextmenu', function(e) {
+    if (e.target.closest('#preview')) {
+        e.preventDefault();
+        return false;
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.target.closest('#preview')) {
+        // Disable F12, Ctrl+Shift+I, Ctrl+U, Ctrl+S, etc.
+        if (e.key === 'F12' || 
+            (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+            (e.ctrlKey && e.key === 'u') ||
+            (e.ctrlKey && e.key === 's') ||
+            (e.ctrlKey && e.key === 'p')) {
+            e.preventDefault();
+            return false;
+        }
+    }
+});
+
+// Modal functions
 function showPurchaseModal(){ document.getElementById('purchaseModal').classList.remove('hidden'); }
 function closePurchaseModal(){ document.getElementById('purchaseModal').classList.add('hidden'); }
 function completePurchase(){
-  // TODO: Implement purchase recording & payment
-  closePurchaseModal();
-  document.getElementById('successModal').classList.remove('hidden');
+    // TODO: Implement purchase recording & payment
+    closePurchaseModal();
+    document.getElementById('successModal').classList.remove('hidden');
 }
 function closeSuccessModal(){ document.getElementById('successModal').classList.add('hidden'); }
 </script>
