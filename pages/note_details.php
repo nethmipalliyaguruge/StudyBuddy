@@ -273,11 +273,17 @@ include __DIR__ . '/header.php';
         <p class="text-xs text-gray-500 mb-4">
           You pay the Material Price + Platform Fee. (The fee is deducted from the seller's payout.)
         </p>
-        <button class="w-full bg-blue-600 text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mb-3"
+        <button class="w-full bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mb-3"
                 onclick="showPurchaseModal()">Purchase Now</button>
-        <button class="w-full bg-white py-2 px-4 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-center">
-          <i class="fas fa-heart mr-2"></i> Add to Wishlist
-        </button>
+        <form method="post" action="add_to_cart.php" class="mt-2">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <input type="hidden" name="note_id" value="<?= (int)$note['id'] ?>">
+          <input type="hidden" name="from" value="<?= htmlspecialchars($_SERVER['REQUEST_URI']) ?>">
+          <button class="w-full inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground py-2 px-4 rounded-md text-sm hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
+            <i class="fas fa-cart-plus"></i> Add to Cart
+          </button>
+        </form>
+
         <div class="mt-4 pt-4 border-t border-gray-200">
           <div class="flex items-center text-sm text-gray-600">
             <i class="fas fa-shield-alt text-green-500 mr-2"></i>

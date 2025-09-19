@@ -98,6 +98,16 @@ $u = current_user(); // null if guest
           <a href="login.php?tab=register" class="text-sm font-medium text-slate-700 hover:text-primary transition-colors">Register</a>
         <?php endif; ?>
       </div>
+      <?php $cartCount = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0; ?>
+        <a href="cart.php" class="relative inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-border hover:bg-muted">
+          <i class="fas fa-shopping-cart"></i>
+          <span>Cart</span>
+          <?php if ($cartCount): ?>
+            <span class="ml-1 inline-flex items-center justify-center text-xs font-semibold bg-primary text-white rounded-full min-w-[1.25rem] h-5 px-1">
+              <?= $cartCount ?>
+            </span>
+          <?php endif; ?>
+        </a>
 
     </div>
   </div>
