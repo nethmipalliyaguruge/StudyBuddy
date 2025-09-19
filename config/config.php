@@ -38,3 +38,4 @@ function tw_head($title='StudyHub') {
   HTML;
 }
 function tw_foot(){ echo "</body></html>"; }
+

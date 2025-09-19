@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   try {
     // Ensure ownership
     if ($id) {
-      $own = $pdo->prepare("SELECT id FROM notes WHERE id=? AND seller_id=?");
+      $own = $pdo->prepare("SELECT id FROM materials WHERE id=? AND seller_id=?");
       $own->execute([$id, (int)$u['id']]);
       if (!$own->fetch()) throw new RuntimeException('Not found or not yours.');
     }
@@ -31,13 +31,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       if ($title==='' || !$module_id) throw new RuntimeException('Title & module required.');
       $price_cents = (int)round($price_rs*100);
 
-      $stmt = $pdo->prepare("UPDATE notes 
+      $stmt = $pdo->prepare("UPDATE materials 
                                SET title=?, description=?, module_id=?, price_cents=? 
                              WHERE id=? AND seller_id=?");
       $stmt->execute([$title, $description, $module_id, $price_cents, $id, (int)$u['id']]);
       flash('ok','Note updated.');
     } elseif ($action==='delete') {
-      $pdo->prepare("DELETE FROM notes WHERE id=? AND seller_id=?")
+      $pdo->prepare("DELETE FROM materials WHERE id=? AND seller_id=?")
           ->execute([$id, (int)$u['id']]);
       flash('ok','Note deleted.');
     } else {
