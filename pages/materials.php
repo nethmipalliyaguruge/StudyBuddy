@@ -255,7 +255,7 @@ include __DIR__ . '/header.php';
                   </span>
                 </div>
                 <h3 class="text-lg font-medium text-foreground mb-2"><?= htmlspecialchars($n['title']) ?></h3>
-                <p class="text-sm text-muted-foreground mb-4 flex-1"><?= htmlspecialchars($n['description']) ?></p>
+                <p class="text-sm text-muted-foreground mb-4 flex-1 line-clamp-3"><?= htmlspecialchars($n['description']) ?></p>
                 <div class="flex items-center justify-between mb-4 mt-auto">
                   <div>
                     <p class="text-xs text-muted-foreground"><?= htmlspecialchars($n['level_name']) ?></p>
@@ -266,6 +266,14 @@ include __DIR__ . '/header.php';
                    href="note_details.php?id=<?= (int)$n['id'] ?>">
                   View Details
                 </a>
+                <form method="post" action="add_to_cart.php" class="mt-2">
+                  <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+                  <input type="hidden" name="note_id" value="<?= (int)$n['id'] ?>">
+                  <input type="hidden" name="from" value="<?= htmlspecialchars($_SERVER['REQUEST_URI']) ?>">
+                  <button class="w-full inline-flex items-center justify-center gap-2 bg-secondary text-secondary-foreground py-2 px-4 rounded-md text-sm hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
+                    <i class="fas fa-cart-plus"></i> Add to Cart
+                  </button>
+                </form>
               </div>
             </div>
           <?php endforeach; ?>

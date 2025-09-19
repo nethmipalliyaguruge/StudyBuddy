@@ -99,6 +99,18 @@ $u = current_user(); // null if guest
         <?php endif; ?>
       </div>
 
+      <?php $cartCount = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0; ?>
+        <a href="cart.php" class="relative inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-border hover:bg-muted">
+          <i class="fas fa-shopping-cart"></i>
+          <span>Cart</span>
+          <?php if ($cartCount): ?>
+            <span class="ml-1 inline-flex items-center justify-center text-xs font-semibold bg-primary text-white rounded-full min-w-[1.25rem] h-5 px-1">
+              <?= $cartCount ?>
+            </span>
+          <?php endif; ?>
+        </a>
+
+
     </div>
   </div>
 </nav>
@@ -118,5 +130,3 @@ $u = current_user(); // null if guest
                        placeholder="Search materials...">
               </div>
             </div> -->
->>>>>>> 43539e07011e986c5436170c24ac4d05479f1a1e
-         
