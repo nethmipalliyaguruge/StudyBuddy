@@ -32,9 +32,9 @@ if (!$note) {
 }
 
 /* ===================== Pricing ===================== */
-$price_cents = (int)$note['price_cents'];       // seller's listed price
-$fee_cents   = fee_5pct($price_cents);          // 5% platform fee
-$total_cents = $price_cents + $fee_cents;       // buyer total
+$price_cents = (int)$note['price_cents'];
+$fee_cents   = fee_5pct($price_cents);       // 5% platform fee
+$total_cents = $price_cents + $fee_cents;    // buyer pays price + fee
 
 $price_rs = number_format($price_cents / 100, 2);
 $fee_rs   = number_format($fee_cents   / 100, 2);
@@ -44,9 +44,9 @@ $total_rs = number_format($total_cents / 100, 2);
 $raw_fp = trim((string)($note['file_path'] ?? ''));
 
 // Where uploads live on disk and on the web:
-$UPLOAD_DIR = realpath(__DIR__ . '/uploads');
-$scriptDir  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
-$UPLOAD_WEB = $scriptDir . '/uploads/';
+$UPLOAD_DIR = realpath(__DIR__ . '/uploads');               // e.g. /.../pages/uploads
+$scriptDir  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/'); // e.g. /NoteSharing/pages
+$UPLOAD_WEB = $scriptDir . '/uploads/';                     // e.g. /NoteSharing/pages/uploads/
 
 // Build the public URL:
 if ($raw_fp === '') {
@@ -57,15 +57,34 @@ if ($raw_fp === '') {
   $file_url = $UPLOAD_WEB . rawurlencode($raw_fp);
 }
 
-// Check file existence
+// Check file existence on disk
 $exists_on_disk = false;
 if ($raw_fp !== '' && is_dir($UPLOAD_DIR)) {
   $disk_candidate = $UPLOAD_DIR . DIRECTORY_SEPARATOR . $raw_fp;
   $exists_on_disk = file_exists($disk_candidate);
 }
 
-// Normalize extension for preview check
+// Normalize extension (for info chips only)
 $ext = strtolower((string)($note['ext'] ?? ''));
+
+/* ===================== Preview Images (user-provided) ===================== */
+$preview_dir_disk = __DIR__ . "/uploads/previews/note_" . $note_id;
+$preview_dir_web  = $UPLOAD_WEB . "previews/note_" . $note_id . '/';
+
+$preview_images = [];
+if (is_dir($preview_dir_disk)) {
+  // load page1, page2, page3 if present (jpg/png/webp)
+  foreach ([1,2,3] as $i) {
+    foreach (['jpg','jpeg','png','webp'] as $imgExt) {
+      $fn = "page{$i}.{$imgExt}";
+      $disk = $preview_dir_disk . '/' . $fn;
+      if (is_file($disk)) {
+        $preview_images[] = $preview_dir_web . $fn;
+        break;
+      }
+    }
+  }
+}
 
 /* Page title for header */
 $title = "Note • " . htmlspecialchars($note['title']);
@@ -150,76 +169,28 @@ include __DIR__ . '/header.php';
 
         <div class="p-6">
           <div id="preview" class="tab-content active">
-            <?php if ($file_url && $exists_on_disk): ?>
-              <?php if ($ext === 'pdf'): ?>
-                <!-- Secure PDF Preview -->
-                <div class="space-y-4">
-                  <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                    <div class="flex items-center">
-                      <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
-                      <span class="text-sm text-yellow-800">Preview shows only the first 3 pages. Full document available after purchase.</span>
-                    </div>
-                  </div>
-                  
-                  <!-- Preview Images Container -->
-                  <div id="pdfPreviewContainer" class="space-y-4">
-                    <div class="text-center py-8">
-                      <i class="fas fa-spinner fa-spin text-2xl text-gray-400 mb-2"></i>
-                      <p class="text-gray-500">Loading preview...</p>
-                    </div>
-                  </div>
+            <?php if (count($preview_images) === 3): ?>
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <div class="flex items-center">
+                  <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
+                  <span class="text-sm text-yellow-800">Preview shows only the first 3 pages (as provided by the seller).</span>
                 </div>
+              </div>
 
-              <?php elseif (in_array($ext, ['doc','docx'])): ?>
-                <!-- Word Document Preview -->
-                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                  <div class="flex items-center">
-                    <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
-                    <span class="text-sm text-yellow-800">Limited preview available. Full document accessible after purchase.</span>
+              <div class="space-y-4">
+                <?php foreach ($preview_images as $i => $imgUrl): ?>
+                  <div class="border border-gray-200 rounded-lg overflow-hidden bg-white relative">
+                    <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs">Page <?= $i+1 ?></div>
+                    <div class="absolute top-2 right-2 bg-red-100 text-red-800 px-2 py-1 rounded text-xs">Preview Only</div>
+                    <img src="<?= htmlspecialchars($imgUrl) ?>" alt="Preview page <?= $i+1 ?>" class="w-full h-auto max-h-[38rem] object-contain select-none pointer-events-none">
                   </div>
-                </div>
-                <div class="border border-gray-300 rounded-lg overflow-hidden bg-gray-50 relative">
-                  <div class="absolute inset-0 bg-white bg-opacity-90 z-10 flex items-center justify-center">
-                    <div class="text-center">
-                      <i class="fas fa-file-word text-4xl text-blue-600 mb-4"></i>
-                      <h4 class="text-lg font-medium text-gray-900 mb-2">Word Document Preview</h4>
-                      <p class="text-sm text-gray-600 mb-4">This is a Microsoft Word document</p>
-                      <p class="text-xs text-gray-500">Full content available after purchase</p>
-                    </div>
-                  </div>
-                  <div style="height: 400px;" class="bg-white"></div>
-                </div>
-
-              <?php elseif (in_array($ext, ['ppt','pptx'])): ?>
-                <!-- PowerPoint Preview -->
-                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                  <div class="flex items-center">
-                    <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
-                    <span class="text-sm text-yellow-800">Limited preview available. Full presentation accessible after purchase.</span>
-                  </div>
-                </div>
-                <div class="border border-gray-300 rounded-lg overflow-hidden bg-gray-50 relative">
-                  <div class="absolute inset-0 bg-white bg-opacity-90 z-10 flex items-center justify-center">
-                    <div class="text-center">
-                      <i class="fas fa-file-powerpoint text-4xl text-orange-600 mb-4"></i>
-                      <h4 class="text-lg font-medium text-gray-900 mb-2">PowerPoint Presentation</h4>
-                      <p class="text-sm text-gray-600 mb-4">This is a Microsoft PowerPoint presentation</p>
-                      <p class="text-xs text-gray-500">Full slides available after purchase</p>
-                    </div>
-                  </div>
-                  <div style="height: 400px;" class="bg-white"></div>
-                </div>
-
-              <?php else: ?>
-                <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <i class="fas fa-file text-4xl text-gray-400 mb-4"></i>
-                  <p class="text-sm text-gray-600">Preview not available for this file type (<?= strtoupper(htmlspecialchars($ext)) ?>).</p>
-                  <p class="text-xs text-gray-500 mt-2">Full document available after purchase.</p>
-                </div>
-              <?php endif; ?>
+                <?php endforeach; ?>
+              </div>
             <?php else: ?>
-              <div class="border border-dashed border-gray-300 rounded-lg p-6 text-sm text-gray-600">
-                File not found. Please contact support.
+              <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <i class="fas fa-image text-4xl text-gray-400 mb-4"></i>
+                <p class="text-sm text-gray-600">No preview images were provided by the seller.</p>
+                <p class="text-xs text-gray-500 mt-1">Full document available after purchase.</p>
               </div>
             <?php endif; ?>
           </div>
@@ -275,6 +246,7 @@ include __DIR__ . '/header.php';
         </p>
         <button class="w-full bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mb-3"
                 onclick="showPurchaseModal()">Purchase Now</button>
+
         <form method="post" action="add_to_cart.php" class="mt-2">
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
           <input type="hidden" name="note_id" value="<?= (int)$note['id'] ?>">
@@ -337,113 +309,15 @@ include __DIR__ . '/header.php';
   </div>
 </div>
 
-<!-- Success Modal -->
-<div id="successModal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center hidden z-50">
-  <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-    <div class="p-6">
-      <div class="text-center">
-        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
-          <i class="fas fa-check text-green-600"></i>
-        </div>
-        <h3 class="mt-4 text-lg font-medium text-gray-900">Purchase Successful!</h3>
-        <p class="mt-2 text-sm text-gray-500">Your material has been purchased and is now available for download.</p>
-        <div class="mt-6">
-          <a href="<?= htmlspecialchars($file_url) ?>" class="inline-flex justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-            Download Material
-          </a>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
-// Secure PDF Preview System
-<?php if ($ext === 'pdf' && $file_url && $exists_on_disk): ?>
-document.addEventListener('DOMContentLoaded', function() {
-    loadPDFPreview('<?= htmlspecialchars($file_url) ?>', <?= $note_id ?>);
-});
-
-function loadPDFPreview(fileUrl, noteId) {
-    // Use server-side preview generator
-    fetch('preview.php?id=' + noteId + '&type=pdf')
-        .then(response => response.json())
-        .then(data => {
-            const container = document.getElementById('pdfPreviewContainer');
-            
-            if (data.success && data.previews) {
-                container.innerHTML = '';
-                data.previews.forEach((preview, index) => {
-                    const pageDiv = document.createElement('div');
-                    pageDiv.className = 'border border-gray-200 rounded-lg overflow-hidden bg-white relative';
-                    
-                    pageDiv.innerHTML = `
-                        <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs">
-                            Page ${index + 1}
-                        </div>
-                        <div class="absolute top-2 right-2 bg-red-100 text-red-800 px-2 py-1 rounded text-xs">
-                            Preview Only
-                        </div>
-                        <img src="${preview}" alt="Page ${index + 1}" class="w-full h-auto max-h-96 object-contain">
-                        <div class="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent pointer-events-none"></div>
-                    `;
-                    
-                    container.appendChild(pageDiv);
-                });
-            } else {
-                container.innerHTML = `
-                    <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
-                        <i class="fas fa-exclamation-triangle text-4xl text-yellow-500 mb-4"></i>
-                        <p class="text-sm text-gray-600">Preview could not be loaded.</p>
-                        <p class="text-xs text-gray-500 mt-2">Full document available after purchase.</p>
-                    </div>
-                `;
-            }
-        })
-        .catch(error => {
-            console.error('Error loading preview:', error);
-            document.getElementById('pdfPreviewContainer').innerHTML = `
-                <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
-                    <i class="fas fa-exclamation-triangle text-4xl text-yellow-500 mb-4"></i>
-                    <p class="text-sm text-gray-600">Preview could not be loaded.</p>
-                    <p class="text-xs text-gray-500 mt-2">Full document available after purchase.</p>
-                </div>
-            `;
-        });
-}
-<?php endif; ?>
-
-// Disable right-click and keyboard shortcuts on preview
-document.addEventListener('contextmenu', function(e) {
-    if (e.target.closest('#preview')) {
-        e.preventDefault();
-        return false;
-    }
-});
-
-document.addEventListener('keydown', function(e) {
-    if (e.target.closest('#preview')) {
-        // Disable F12, Ctrl+Shift+I, Ctrl+U, Ctrl+S, etc.
-        if (e.key === 'F12' || 
-            (e.ctrlKey && e.shiftKey && e.key === 'I') ||
-            (e.ctrlKey && e.key === 'u') ||
-            (e.ctrlKey && e.key === 's') ||
-            (e.ctrlKey && e.key === 'p')) {
-            e.preventDefault();
-            return false;
-        }
-    }
-});
-
-// Modal functions
+// Basic modal helpers
 function showPurchaseModal(){ document.getElementById('purchaseModal').classList.remove('hidden'); }
 function closePurchaseModal(){ document.getElementById('purchaseModal').classList.add('hidden'); }
 function completePurchase(){
-    // TODO: Implement purchase recording & payment
-    closePurchaseModal();
-    document.getElementById('successModal').classList.remove('hidden');
+  // TODO: integrate payment + purchase record
+  closePurchaseModal();
+  alert('Purchase flow placeholder');
 }
-function closeSuccessModal(){ document.getElementById('successModal').classList.add('hidden'); }
 </script>
 
 <?php include __DIR__ . '/footer.php'; ?>
