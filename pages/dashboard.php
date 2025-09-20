@@ -18,18 +18,10 @@ requireLogin();
 $user = currentUser();            // ['id','full_name','role', ...]
 $role = $user['role'] ?? 'student';
 
-// OPTIONAL: if this page is student-only, uncomment below to bounce admins
-// if ($role !== 'student') { header('Location: admin_dashboard.php'); exit; }
 
 include 'header.php';
 $title = "Dashboard - StudyBuddy APIIT";
 ?>
-
-<!-- small welcome / role
-    <div class="mt-4 text-sm text-slate-600">
-      Signed in as <span class="font-medium"><?php echo htmlspecialchars($user['full_name']); ?></span>
-      • Role: <span class="font-medium"><?php echo htmlspecialchars($role); ?></span>
-    </div> -->
 
 <!-- Hero / Title -->
 <section class="bg-slate-50">
@@ -94,22 +86,6 @@ $title = "Dashboard - StudyBuddy APIIT";
         </div>
       </a>
     </div>
-
-    <?php if ($role === 'admin'): ?>
-      <!-- optional admin card if an admin opens this page -->
-      <div class="grid gap-6 md:grid-cols-3 mt-6">
-        <a href="admin_dashboard.php"
-           class="card rounded-xl p-6 sm:p-8 bg-yellow-200/60 border border-yellow-300">
-          <div class="flex flex-col items-center text-center">
-            <div class="w-12 h-12 rounded-full border border-yellow-900/30 flex items-center justify-center text-2xl text-yellow-900 mb-4">
-              <i class="fa-solid fa-shield-halved"></i>
-            </div>
-            <h3 class="text-xl font-extrabold text-slate-900">Admin Panel</h3>
-            <p class="text-slate-700 mt-1">Moderate uploads & users</p>
-          </div>
-        </a>
-      </div>
-    <?php endif; ?>
   </div>
 </main>
 

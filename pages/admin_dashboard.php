@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/helpers.php';
-// require_role('admin');
+require_role('admin');
 
 $tab = $_GET['tab'] ?? ($_POST['__tab'] ?? 'schools');
 

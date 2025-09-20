@@ -37,8 +37,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           $_SESSION['uid'] = $u['id'];
 
           // Where to send them after login (adjust if you like)
+          if ($u['role'] === 'admin') {
+          header('Location: admin_dashboard.php');
+        } else {
           header('Location: dashboard.php');
-          exit;
+        }
+        exit;
         }
       } else {
         flash('err', 'Invalid credentials.');
@@ -70,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
   }
 }
+$title = "Login / Register - StudyBuddy APIIT";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -118,12 +123,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <!-- Card -->
   <div class="bg-card rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-border">
     <!-- Branded header -->
-    <div class="bg-study-primary py-6 px-8">
+    <div class="bg-study-primary py-6 px-8"><a href="index.php">
       <div class="flex items-center justify-center gap-2">
         <i class="fas fa-graduation-cap text-xl text-white"></i>
         <h1 class="text-2xl font-bold text-white text-center">StudyBuddy APIIT</h1>
       </div>
-      <p class="text-white/80 text-center mt-1">Your Academic Resource Marketplace</p>
+      <p class="text-white/80 text-center mt-1">Your Academic Resource Marketplace</p></a>
     </div>
 
     <!-- Body -->
