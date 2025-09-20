@@ -122,7 +122,8 @@ function isChecked(array $arr, $val): string {
 
 include __DIR__ . '/header.php';
 ?>
-
+<body class="min-h-screen flex flex-col">
+    <main class="flex-1">
 <main class="bg-muted text-foreground">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
@@ -350,3 +351,4 @@ include __DIR__ . '/header.php';
 </script>
 
 <?php include __DIR__ . '/footer.php'; ?>
+</body>

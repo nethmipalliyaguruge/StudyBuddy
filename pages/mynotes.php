@@ -114,7 +114,8 @@ $total_earn_rs = 0.00;
 $title = "My Notes - StudyBuddy APIIT";
 include 'header.php'; 
 ?>
-<body class="bg-muted text-foreground">
+<body class="bg-muted text-foreground min-h-screen flex flex-col">
+  <main class="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-8">
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex justify-between items-center mb-6">
       <div>
@@ -360,7 +361,7 @@ include 'header.php';
       </div>
     </div>
   </div>
-
+</main>
   <script>
     function showEditModal(data) {
       document.getElementById('editId').value = data.id || '';

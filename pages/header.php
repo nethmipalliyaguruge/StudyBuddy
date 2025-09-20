@@ -13,6 +13,7 @@ $u = current_user(); // null if guest
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="../assets/css/custom.css">
   <script>
     tailwind.config = {
       theme: {
@@ -90,6 +91,7 @@ $u = current_user(); // null if guest
           <span class="text-sm font-medium text-slate-700">
             <?= htmlspecialchars($u['full_name'] ?? 'User') ?>
           </span>
+          <a href="profile.php" class="text-sm font-medium text-slate-700 hover:text-primary transition-colors">Profile</a>
           <a href="logout.php" class="text-sm font-medium text-slate-700 hover:text-primary transition-colors">
             Logout
           </a>

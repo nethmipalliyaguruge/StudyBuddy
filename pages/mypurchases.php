@@ -22,8 +22,9 @@ $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $title = "My Purchases - StudyBuddy APIIT";
 include 'header.php';
 ?>
-<main class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-  <h1 class="text-2xl font-bold mb-6">My Purchases</h1>
+<body class="min-h-screen flex flex-col">
+    <main class="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <h1 class="text-2xl font-bold mb-6">My Purchases</h1>
 
   <?php if (isset($_GET['just_bought'])): ?>
     <div class="mb-4 p-3 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
