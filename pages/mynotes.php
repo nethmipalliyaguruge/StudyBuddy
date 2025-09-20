@@ -18,9 +18,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
   try {
     // Ensure ownership
     if ($id) {
-      $own = $pdo->prepare("SELECT id FROM materials WHERE id=? AND seller_id=?");
+      $own = $pdo->prepare("SELECT id, title, is_approved FROM notes WHERE id=? AND seller_id=?");
       $own->execute([$id, (int)$u['id']]);
-      if (!$own->fetch()) throw new RuntimeException('Not found or not yours.');
+      $noteData = $own->fetch(PDO::FETCH_ASSOC);
+      if (!$noteData) throw new RuntimeException('Not found or not yours.');
     }
 
     if ($action==='update') {
@@ -31,38 +32,68 @@ if ($_SERVER['REQUEST_METHOD']==='POST') {
       if ($title==='' || !$module_id) throw new RuntimeException('Title & module required.');
       $price_cents = (int)round($price_rs*100);
 
-      $stmt = $pdo->prepare("UPDATE materials 
+      $stmt = $pdo->prepare("UPDATE notes 
                                SET title=?, description=?, module_id=?, price_cents=? 
                              WHERE id=? AND seller_id=?");
       $stmt->execute([$title, $description, $module_id, $price_cents, $id, (int)$u['id']]);
       flash('ok','Note updated.');
     } elseif ($action==='delete') {
-      $pdo->prepare("DELETE FROM materials WHERE id=? AND seller_id=?")
-          ->execute([$id, (int)$u['id']]);
-      flash('ok','Note deleted.');
+      // Check if note has been purchased
+      $purchaseCheck = $pdo->prepare("SELECT COUNT(*) as purchase_count FROM purchases WHERE note_id = ?");
+      $purchaseCheck->execute([$id]);
+      $purchaseCount = $purchaseCheck->fetchColumn();
+      
+      if ($purchaseCount > 0) {
+        // Soft delete: mark as inactive instead of deleting
+        $stmt = $pdo->prepare("UPDATE notes SET is_approved = -1, title = CONCAT('[DELETED] ', title) WHERE id=? AND seller_id=?");
+        $stmt->execute([$id, (int)$u['id']]);
+        flash('ok', 'Note "' . htmlspecialchars($noteData['title']) . '" has been deactivated (it cannot be fully deleted because it has been purchased).');
+      } else {
+        // Hard delete: actually remove from database
+        $pdo->prepare("DELETE FROM notes WHERE id=? AND seller_id=?")
+            ->execute([$id, (int)$u['id']]);
+        flash('ok','Note deleted.');
+      }
+    } elseif ($action==='restore') {
+      // Restore soft-deleted note
+      if ((int)$noteData['is_approved'] === -1) {
+        // Remove [DELETED] prefix from title if it exists
+        $originalTitle = preg_replace('/^\[DELETED\]\s*/', '', $noteData['title']);
+        
+        $stmt = $pdo->prepare("UPDATE notes SET is_approved = 0, title = ? WHERE id=? AND seller_id=?");
+        $stmt->execute([$originalTitle, $id, (int)$u['id']]);
+        flash('ok', 'Note "' . htmlspecialchars($originalTitle) . '" has been restored and is pending approval.');
+      } else {
+        throw new RuntimeException('This note is not deleted and cannot be restored.');
+      }
     } else {
       throw new RuntimeException('Invalid action.');
     }
   } catch (Throwable $e) {
-    flash('err',$e->getMessage());
+    if (strpos($e->getMessage(), 'foreign key constraint') !== false || strpos($e->getMessage(), '1451') !== false) {
+      flash('err','Cannot delete this note because it has been purchased by students. The note has been deactivated instead.');
+    } else {
+      flash('err',$e->getMessage());
+    }
   }
 
   header("Location: mynotes.php"); exit;
 }
 
 /* ===================== DATA QUERIES ===================== */
+// Show all notes including soft-deleted ones (is_approved = -1)
 $notes = $pdo->prepare("
   SELECT 
-    m.id, m.title, m.description, m.file_path, m.price_cents, m.is_approved, m.created_at,
+    n.id, n.title, n.description, n.file_path, n.price_cents, n.is_approved, n.created_at,
     mo.id AS mo_id, mo.title AS module_title,
     l.name AS level_name,
     s.name AS school_name
-  FROM notes m
-  LEFT JOIN modules mo ON mo.id = m.module_id
+  FROM notes n
+  LEFT JOIN modules mo ON mo.id = n.module_id
   LEFT JOIN levels  l  ON l.id = mo.level_id
   LEFT JOIN schools s ON s.id = l.school_id
-  WHERE m.seller_id = ?
-  ORDER BY m.created_at DESC, m.id DESC
+  WHERE n.seller_id = ?
+  ORDER BY n.created_at DESC, n.id DESC
 ");
 $notes->execute([(int)$u['id']]);
 $notes = $notes->fetchAll(PDO::FETCH_ASSOC);
@@ -79,7 +110,6 @@ $modules = $pdo->query("
 $total_notes   = count($notes);
 $total_sales   = 0;
 $total_earn_rs = 0.00;
-$avg_rating    = 0;
 
 $title = "My Notes - StudyBuddy APIIT";
 include 'header.php'; 
@@ -114,7 +144,7 @@ include 'header.php';
             <i class="fas fa-file-alt text-study-primary"></i>
           </div>
           <div class="ml-5 w-0 flex-1">
-            <dt class="text-sm font-medium text-muted-foreground truncate">Total Notes</dt>
+            <dt class="text-sm font-medium text-muted-foreground truncate">Active Notes</dt>
             <dd class="text-2xl font-semibold text-foreground"><?= number_format($total_notes) ?></dd>
           </div>
         </div>
@@ -137,18 +167,7 @@ include 'header.php';
           </div>
           <div class="ml-5 w-0 flex-1">
             <dt class="text-sm font-medium text-muted-foreground truncate">Total Earnings</dt>
-            <dd class="text-2xl font-semibold text-foreground">LKR <?= number_format($total_earn_rs,2) ?></dd>
-          </div>
-        </div>
-      </div>
-      <div class="bg-card border border-border rounded-lg p-5">
-        <div class="flex items-center">
-          <div class="flex-shrink-0 bg-secondary rounded-md p-3">
-            <i class="fas fa-star text-study-primary"></i>
-          </div>
-          <div class="ml-5 w-0 flex-1">
-            <dt class="text-sm font-medium text-muted-foreground truncate">Average Rating</dt>
-            <dd class="text-2xl font-semibold text-foreground"><?= $avg_rating ? number_format($avg_rating,1) : '—' ?></dd>
+            <dd class="text-2xl font-semibold text-foreground"><?= number_format($total_earn_rs,2) ?></dd>
           </div>
         </div>
       </div>
@@ -175,21 +194,29 @@ include 'header.php';
               <?php if (!$notes): ?>
                 <tr>
                   <td colspan="5" class="px-6 py-6 text-center text-sm text-muted-foreground">
-                    You haven’t uploaded any notes yet.
+                    You haven't uploaded any notes yet.
                   </td>
                 </tr>
               <?php endif; ?>
               <?php foreach ($notes as $n): 
                     $uploaded = date('Y-m-d', strtotime($n['created_at']));
-                    $badge = ((int)$n['is_approved']===1)
-                      ? '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">Approved</span>'
-                      : '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800">Pending</span>';
+                    $isDeleted = (int)$n['is_approved'] === -1;
+                    
+                    if ($isDeleted) {
+                      $badge = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Deactivated</span>';
+                    } elseif ((int)$n['is_approved'] === 1) {
+                      $badge = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">Approved</span>';
+                    } else {
+                      $badge = '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-amber-100 text-amber-800">Pending</span>';
+                    }
+                    
+                    $rowClass = $isDeleted ? 'opacity-60 bg-gray-50' : '';
               ?>
-                <tr>
+                <tr class="<?= $rowClass ?>">
                   <td class="px-6 py-4">
                     <div class="text-sm font-medium text-foreground"><?= htmlspecialchars($n['title']) ?></div>
                     <div class="text-sm text-muted-foreground">Uploaded on <?= $uploaded ?></div>
-                    <?php if ($n['file_path']): ?>
+                    <?php if ($n['file_path'] && !$isDeleted): ?>
                       <a class="text-xs text-primary underline" href="<?= htmlspecialchars($n['file_path']) ?>" target="_blank"><i class="fa-solid fa-link mr-1"></i>Open file</a>
                     <?php endif; ?>
                   </td>
@@ -199,27 +226,39 @@ include 'header.php';
                     <?= htmlspecialchars($n['module_title'] ?? '—') ?>
                   </td>
                   <td class="px-6 py-4 text-sm text-foreground">
-                    LKR <?= money_rs($n['price_cents']) ?>
+                    <?= money_rs($n['price_cents']) ?>
                   </td>
                   <td class="px-6 py-4"><?= $badge ?></td>
                   <td class="px-6 py-4 text-right text-sm font-medium">
-                    <button class="text-primary hover:underline mr-3"
-                      onclick='showEditModal(<?= json_encode([
-                        "id"=>$n["id"],
-                        "title"=>$n["title"],
-                        "description"=>$n["description"],
-                        "module_id"=>$n["mo_id"],
-                        "price_rs"=>money_rs($n["price_cents"])
-                      ]) ?>)'>
-                      <i class="fas fa-edit"></i> Edit
-                    </button>
-                    <button class="text-red-600 hover:underline"
-                      onclick='confirmDelete(<?= json_encode([
-                        "id"=>$n["id"],
-                        "title"=>$n["title"]
-                      ]) ?>)'>
-                      <i class="fas fa-trash-alt"></i> Delete
-                    </button>
+                    <?php if ($isDeleted): ?>
+                      <!-- Restore button for deactivated notes -->
+                      <button class="text-green-600 hover:underline"
+                        onclick='confirmRestore(<?= json_encode([
+                          "id"=>$n["id"],
+                          "title"=>$n["title"],
+                        ]) ?>)'>
+                        <i class="fas fa-undo"></i> Restore
+                      </button>
+                    <?php else: ?>
+                      <!-- Edit and Delete buttons for active notes -->
+                      <button class="text-primary hover:underline mr-3"
+                        onclick='showEditModal(<?= json_encode([
+                          "id"=>$n["id"],
+                          "title"=>$n["title"],
+                          "description"=>$n["description"],
+                          "module_id"=>$n["mo_id"],
+                          "price_rs"=>money_rs($n["price_cents"])
+                        ]) ?>)'>
+                        <i class="fas fa-edit"></i> Edit
+                      </button>
+                      <button class="text-red-600 hover:underline"
+                        onclick='confirmDelete(<?= json_encode([
+                          "id"=>$n["id"],
+                          "title"=>$n["title"]
+                        ]) ?>)'>
+                        <i class="fas fa-trash-alt"></i> Delete
+                      </button>
+                    <?php endif; ?>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -246,7 +285,7 @@ include 'header.php';
 
           <div>
             <label for="editTitle" class="block text-sm font-medium text-foreground mb-1">Title</label>
-            <input type="text" id="editTitle" name="title" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring">
+            <input type="text" id="editTitle" name="title" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" required>
           </div>
 
           <div>
@@ -256,7 +295,8 @@ include 'header.php';
 
           <div>
             <label for="editModule" class="block text-sm font-medium text-foreground mb-1">Module</label>
-            <select id="editModule" name="module_id" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring">
+            <select id="editModule" name="module_id" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" required>
+              <option value="">-- Select Module --</option>
               <?php foreach ($modules as $mo): ?>
                 <option value="<?= (int)$mo['id'] ?>">
                   [<?= htmlspecialchars($mo['school_name']) ?>] <?= htmlspecialchars($mo['level_name']) ?> → <?= htmlspecialchars($mo['module_title']) ?>
@@ -267,7 +307,7 @@ include 'header.php';
 
           <div>
             <label for="editPrice" class="block text-sm font-medium text-foreground mb-1">Price (LKR)</label>
-            <input type="number" id="editPrice" name="price_rs" step="0.01" min="0" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring">
+            <input type="number" id="editPrice" name="price_rs" step="0.01" min="0" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" required>
           </div>
 
           <div class="flex justify-end space-x-3 mt-6">
@@ -287,7 +327,8 @@ include 'header.php';
           <i class="fas fa-exclamation-triangle text-red-600"></i>
         </div>
         <h3 class="mt-4 text-lg font-medium text-foreground">Delete Note</h3>
-        <p class="mt-2 text-sm text-muted-foreground">Are you sure you want to delete "<span id="deleteNoteTitle" class="font-medium">Note Title</span>"? This action cannot be undone.</p>
+        <p class="mt-2 text-sm text-muted-foreground">Are you sure you want to delete "<span id="deleteNoteTitle" class="font-medium">Note Title</span>"?</p>
+        <p class="mt-1 text-xs text-muted-foreground">If this note has been purchased, it will be deactivated instead of deleted.</p>
         <form method="post" id="deleteForm" class="mt-6 flex justify-center space-x-3">
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
           <input type="hidden" name="action" value="delete">
@@ -299,18 +340,45 @@ include 'header.php';
     </div>
   </div>
 
+  <!-- Restore Confirmation Modal -->
+  <div id="restoreModal" class="fixed inset-0 bg-black/50 flex items-center justify-center hidden z-50">
+    <div class="bg-card border border-border rounded-lg shadow-xl max-w-md w-full mx-4">
+      <div class="p-6 text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+          <i class="fas fa-undo text-green-600"></i>
+        </div>
+        <h3 class="mt-4 text-lg font-medium text-foreground">Restore Note</h3>
+        <p class="mt-2 text-sm text-muted-foreground">Are you sure you want to restore "<span id="restoreNoteTitle" class="font-medium">Note Title</span>"?</p>
+        <p class="mt-1 text-xs text-muted-foreground">This will make the note active again and pending for approval.</p>
+        <form method="post" id="restoreForm" class="mt-6 flex justify-center space-x-3">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <input type="hidden" name="action" value="restore">
+          <input type="hidden" name="id" id="restoreId" value="">
+          <button type="button" class="bg-white py-2 px-4 border border-input rounded-md text-sm font-medium text-foreground hover:bg-muted" onclick="closeRestoreModal()">Cancel</button>
+          <button type="submit" class="inline-flex justify-center py-2 px-4 rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700">Restore Note</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <script>
     function showEditModal(data) {
       document.getElementById('editId').value = data.id || '';
       document.getElementById('editTitle').value = data.title || '';
       document.getElementById('editDescription').value = data.description || '';
       document.getElementById('editPrice').value = data.price_rs || '';
+      
+      // Reset and set module selection
       const sel = document.getElementById('editModule');
+      sel.selectedIndex = 0; // Reset to "-- Select Module --"
       if (sel && data.module_id) {
-        [...sel.options].forEach(o => { o.selected = (parseInt(o.value,10) === parseInt(data.module_id,10)); });
+        [...sel.options].forEach(o => { 
+          o.selected = (parseInt(o.value,10) === parseInt(data.module_id,10)); 
+        });
       }
       document.getElementById('editModal').classList.remove('hidden');
     }
+    
     function closeEditModal() {
       document.getElementById('editModal').classList.add('hidden');
     }
@@ -320,8 +388,19 @@ include 'header.php';
       document.getElementById('deleteId').value = data.id || '';
       document.getElementById('deleteModal').classList.remove('hidden');
     }
+    
     function closeDeleteModal() {
       document.getElementById('deleteModal').classList.add('hidden');
+    }
+
+    function confirmRestore(data) {
+      document.getElementById('restoreNoteTitle').textContent = data.title || 'Note';
+      document.getElementById('restoreId').value = data.id || '';
+      document.getElementById('restoreModal').classList.remove('hidden');
+    }
+    
+    function closeRestoreModal() {
+      document.getElementById('restoreModal').classList.add('hidden');
     }
   </script>
 </body>

@@ -56,7 +56,7 @@
                 </div>
                 <div class="flex space-x-4">
                     <a href="./login.php" class="px-4 py-2 text-primary border border-primary rounded-md hover:bg-primary hover:text-white transition-colors">Login</a>
-                    <a href="./login.php#registerForm" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">Register</a>
+                    <a href="login.php?tab=register" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">Register</a>
                 </div>
                 <!-- Mobile menu button -->
                 <button id="mobile-menu-btn" class="md:hidden text-gray-600">
@@ -67,8 +67,6 @@
             <div id="mobile-menu" class="hidden md:hidden mt-4 space-y-2">
                 <a href="index.php" class="block py-2 text-primary">Home</a>
                 <a href="materials.php" class="block py-2 text-gray-600">Study Materials</a>
-                <a href="about.php" class="block py-2 text-gray-600">About</a>
-                <a href="contact.php" class="block py-2 text-gray-600">Contact</a>
             </div>
         </nav>
     </header>
@@ -87,7 +85,7 @@
                 <a href="materials.php" class="px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">
                     Browse Materials
                 </a>
-                <a href="./login.php#registerForm" class="px-8 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:text-white transition-colors">
+                <a href="login.php?tab=register" class="px-8 py-3 border border-primary text-primary rounded-lg hover:bg-primary hover:text-white transition-colors">
                     Join Community
                 </a>
             </div>
@@ -129,7 +127,7 @@
         <div class="container mx-auto px-4 text-center">
             <h2 class="text-3xl font-bold text-white mb-4">Ready to Excel in Your Studies?</h2>
             <p class="text-xl text-white/90 mb-8">Join thousands of APIIT students who are already using StudyBuddy to achieve academic success.</p>
-            <a href="./login.php#registerForm" class="px-8 py-3 bg-white text-primary rounded-lg hover:bg-gray-100 transition-colors font-semibold">
+            <a href="login.php?tab=register" class="px-8 py-3 bg-white text-primary rounded-lg hover:bg-gray-100 transition-colors font-semibold">
                 Get Started Today
             </a>
         </div>

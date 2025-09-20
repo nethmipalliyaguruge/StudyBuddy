@@ -78,7 +78,7 @@ $u = current_user(); // null if guest
         <!-- Main nav -->
         <div class="hidden md:flex space-x-4">
           <a href="dashboard.php" class="<?= navClasses('dashboard.php', $current) ?>" <?= $current==='dashboard.php'?'aria-current="page"':''; ?>>Dashboard</a>
-          <a href="materials.php" class="<?= navClasses('materials.php', $current) ?>" <?= $current==='materials.php'?'aria-current="page"':''; ?>>Browse</a>
+          <a href="materials.php" class="<?= navClasses('materials.php', $current) ?>" <?= $current==='materials.php'?'aria-current="page"':''; ?>>Study Materials</a>
           <a href="mynotes.php" class="<?= navClasses('mynotes.php', $current) ?>" <?= $current==='mynotes.php'?'aria-current="page"':''; ?>>My Notes</a>
           <a href="mypurchases.php" class="<?= navClasses('mypurchases.php', $current) ?>" <?= $current==='mypurchases.php'?'aria-current="page"':''; ?>>My Purchases</a>
         </div>

@@ -87,7 +87,7 @@ $title = "Dashboard - StudyBuddy APIIT";
          class="card rounded-xl p-6 sm:p-8 bg-indigo-300/60 border border-indigo-200">
         <div class="flex flex-col items-center text-center">
           <div class="w-12 h-12 rounded-full border border-indigo-900/30 flex items-center justify-center text-2xl text-indigo-900 mb-4">
-            <i class="fa-regular fa-wallet"></i>
+            <i class="fa-solid fa-wallet"></i>
           </div>
           <h3 class="text-xl font-extrabold text-slate-900">My Transactions</h3>
           <p class="text-slate-700 mt-1">Download and manage all<br/>Transactions</p>

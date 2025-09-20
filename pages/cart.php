@@ -115,11 +115,11 @@ include __DIR__ . '/header.php';
         </div>
 
         <div class="mt-5 space-y-2">
-          <form method="post" action="checkout.php">
+          <form method="post" action="checkout.php" onsubmit="return submitCartCheckout(this);">
             <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
-            <button <?= $items ? '' : 'disabled' ?>
-              class="w-full bg-primary text-white py-2 rounded-md text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
-              Proceed to Checkout
+            <input type="hidden" name="action" value="cart_checkout">
+            <button class="w-full bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90">
+              Process Checkout
             </button>
           </form>
 
@@ -135,4 +135,19 @@ include __DIR__ . '/header.php';
     </aside>
   </div>
 </main>
+
+
+<script>
+async function submitCartCheckout(form){
+  const fd = new FormData(form);
+  const res = await fetch(form.action, { method:'POST', body: fd, credentials:'same-origin' });
+  const json = await res.json();
+  if (json.ok) {
+    window.location.href = json.redirect || 'mypurchases.php?just_bought=1';
+  } else {
+    alert(json.error || 'Checkout failed');
+  }
+  return false; // prevent normal submit
+}
+</script>
 <?php include __DIR__ . '/footer.php'; ?>

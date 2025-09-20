@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/helpers.php';
-require_login(); // only logged-in users can view details
+
 
 $note_id = (int)($_GET['id'] ?? 0);
 if ($note_id <= 0) { http_response_code(404); exit('Note not found.'); }
@@ -85,6 +85,7 @@ if (is_dir($preview_dir_disk)) {
     }
   }
 }
+$CSRF = csrf_token();
 
 /* Page title for header */
 $title = "Note • " . htmlspecialchars($note['title']);
@@ -245,8 +246,16 @@ include __DIR__ . '/header.php';
         <p class="text-xs text-gray-500 mb-4">
           You pay the Material Price + Platform Fee. (The fee is deducted from the seller's payout.)
         </p>
-        <button class="w-full bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mb-3"
-                onclick="showPurchaseModal()">Purchase Now</button>
+        <?php if (is_logged_in()): ?>
+          <button class="w-full bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90"
+            onclick="showPurchaseModal()">Purchase Now</button>
+        <?php else: ?>
+          <a href="login.php?redirect=<?= urlencode($_SERVER['REQUEST_URI']) ?>"
+            class="w-full inline-block text-center bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90">
+            Login to Purchase
+          </a>
+        <?php endif; ?>
+
 
         <form method="post" action="add_to_cart.php" class="mt-2">
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
@@ -310,15 +319,51 @@ include __DIR__ . '/header.php';
   </div>
 </div>
 
+<?php $CSRF = csrf_token(); ?>
 <script>
-// Basic modal helpers
 function showPurchaseModal(){ document.getElementById('purchaseModal').classList.remove('hidden'); }
 function closePurchaseModal(){ document.getElementById('purchaseModal').classList.add('hidden'); }
-function completePurchase(){
-  // TODO: integrate payment + purchase record
-  closePurchaseModal();
-  alert('Purchase flow placeholder');
+
+async function completePurchase(){
+  try {
+    const body = new URLSearchParams();
+    body.set('csrf', '<?= htmlspecialchars($CSRF) ?>');
+    body.set('note_id', '<?= (int)$note_id ?>');
+
+    const res = await fetch('checkout.php', {
+      method: 'POST',
+      headers: {
+        // Make it obvious we expect JSON (server will honor this)
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body
+    });
+
+    // Read as text first to survive accidental HTML output
+    const text = await res.text();
+
+    // Try to parse as JSON; if it fails, just go to My Purchases
+    let data = null;
+    try { data = JSON.parse(text); } catch (e) {
+      // Most likely HTML/PHP warning printed -> just redirect
+      window.location.href = 'mypurchases.php?just_bought=1';
+      return;
+    }
+
+    if (!data.ok) {
+      alert('Purchase failed: ' + (data.error || 'Unknown error'));
+      return;
+    }
+
+    window.location.href = data.redirect || 'mypurchases.php?just_bought=1';
+  } catch (err) {
+    alert('Purchase failed: ' + err.message);
+  } finally {
+    closePurchaseModal();
+  }
 }
 </script>
+
 
 <?php include __DIR__ . '/footer.php'; ?>

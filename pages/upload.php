@@ -104,8 +104,8 @@ include __DIR__ . '/header.php';
 ?>
 <main class="relative">
   <div class="h-56 w-full overflow-hidden">
-    <img src="https://images.unsplash.com/photo-1513475382585-d06e58bcb0ea?q=80&w=1600&auto=format&fit=crop"
-         alt="Study background" class="w-full h-full object-cover" />
+    <!-- <img src="../assets/images/Note3.jpg"
+         alt="Study background" class="w-full h-full object-cover" /> -->
   </div>
 
   <div class="max-w-3xl mx-auto px-4 sm:px-6">
