@@ -198,57 +198,10 @@ function money_rs($cents){ return number_format(((int)$cents)/100, 2); }
 
 
 function sel($a,$b){ return (string)$a===(string)$b?'selected':''; }
+
+$title = 'Admin Dashboard';
+include __DIR__ . '/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Admin Dashboard - StudyBuddy APIIT</title>
-
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: { extend: {
-        colors: {
-          primary:'#006644','primary-foreground':'#fff',
-          secondary:'#f0f9f5','secondary-foreground':'#006644',
-          accent:'#4ade80','accent-foreground':'#006644',
-          muted:'#f1f5f9','muted-foreground':'#64748b',
-          background:'#ffffff', foreground:'#0f172a',
-          card:'#ffffff','card-foreground':'#0f172a',
-          border:'#e2e8f0', input:'#e2e8f0', ring:'#006644'
-        }
-      }}
-    }
-  </script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-  <style>
-    body { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .tab-btn-active { color:#006644; border-color:#006644; }
-  </style>
-</head>
-<body class="bg-muted text-foreground">
-
-  <!-- Header -->
-  <header class="bg-white border-b border-border">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6">
-      <div class="h-16 flex items-center justify-between">
-        <a class="flex items-center gap-2" href="index.php">
-          <i class="fas fa-graduation-cap text-2xl text-primary"></i>
-          <span class="text-xl font-bold text-primary">StudyBuddy APIIT</span>
-        </a>
-        <div class="flex items-center gap-3">
-          <span class="text-sm text-slate-700"><?= htmlspecialchars((current_user()['full_name'] ?? '')) ?></span>
-          <a href="logout.php" class="text-sm font-medium text-slate-700 hover:text-primary transition-colors">
-            <i class="fas fa-sign-out-alt mr-1"></i> Logout
-          </a>
-        </div>
-      </div>
-    </div>
-  </header>
-
   <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
 
     <!-- Flash -->
