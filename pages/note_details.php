@@ -1,29 +1,63 @@
 <?php
+// pages/note_detail.php
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/helpers.php';
 
 $note_id = (int)($_GET['id'] ?? 0);
 if ($note_id <= 0) { http_response_code(404); exit('Note not found.'); }
 
-/* ---------- tiny helpers ---------- */
-function normalize_web_path(string $p): string {
-  $p = trim($p);
-  if ($p === '') return '';
+/* ------------------ Robust path helpers ------------------ */
 
-  // Already absolute URL or root-relative -> keep
-  if (preg_match('#^https?://#i', $p) || $p[0] === '/') return $p;
-
-  // Determine app root web base: e.g. /StudyBuddy (strip trailing /pages)
-  $appBase = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');   // e.g. /StudyBuddy/pages
-  $rootBase = preg_replace('#/pages$#', '', $appBase);       // -> /StudyBuddy
-
-  if (stripos($p, 'uploads/') === 0) return $rootBase . '/' . $p;
-  if (stripos($p, 'previews/') === 0) return $rootBase . '/uploads/' . $p;
-
-  return $rootBase . '/' . ltrim($p, '/');
+// App base web path like "/StudyBuddy" (project root = pages/..)
+function app_base_web(): string {
+  $docRootFs = rtrim(str_replace('\\','/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
+  $projectFs = rtrim(str_replace('\\','/', realpath(__DIR__ . '/..') ?: ''), '/'); // StudyBuddy
+  $suffix    = substr($projectFs, strlen($docRootFs));    // "/StudyBuddy" (or "")
+  if ($suffix === false) $suffix = '';
+  $base = '/' . ltrim($suffix, '/');
+  return $base === '//' ? '/' : $base;
 }
 
+/**
+ * Convert anything (absolute FS path / web path / relative) into a proper web URL.
+ * Accepts:
+ *  - "uploads/..."                                (relative)
+ *  - "/uploads/..." or "/StudyBuddy/uploads/..."  (web path)
+ *  - "C:\xampp\htdocs\StudyBuddy\...\uploads\..." (Windows abs path)
+ *  - "/var/www/html/StudyBuddy/uploads/..."       (Unix abs path)
+ *  - "http(s)://..."                               (left as-is)
+ */
+function to_web_path(string $p): string {
+  $p = trim($p);
+  if ($p === '') return '';
+  $p = str_replace('\\','/',$p);
 
+  // Full URL? keep it.
+  if (preg_match('#^https?://#i', $p)) return $p;
+
+  $base = app_base_web(); // e.g. "/StudyBuddy" or "/"
+
+  // Already root-relative web path
+  if ($p[0] === '/') return $p;
+
+  // Absolute FS path containing "/uploads/..." -> collapse to web under app base
+  if (preg_match('#/(uploads/.+)$#i', $p, $m)) {
+    return rtrim($base, '/') . '/' . $m[1];
+  }
+  // Absolute FS path containing "/previews/..." -> ensure it sits under /uploads/previews/...
+  if (preg_match('#/(previews/.+)$#i', $p, $m)) {
+    return rtrim($base, '/') . '/uploads/' . $m[1];
+  }
+
+  // Relative forms:
+  if (stripos($p, 'uploads/') === 0)  return rtrim($base, '/') . '/' . $p;
+  if (stripos($p, 'previews/') === 0) return rtrim($base, '/') . '/uploads/' . $p;
+
+  // Anything else: relative to app base
+  return rtrim($base, '/') . '/' . ltrim($p, '/');
+}
+
+/* ------------------ Fetch note ------------------ */
 $sql = "
   SELECT
     n.id, n.title, n.description, n.file_path, n.price_cents, n.created_at, n.is_approved,
@@ -47,48 +81,38 @@ $note = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$note) { http_response_code(404); exit('Note not found.'); }
 
-/* ===================== Pricing ===================== */
+/* ------------------ Pricing ------------------ */
 $price_cents = (int)$note['price_cents'];
 $fee_cents   = fee_5pct($price_cents);       // 5% platform fee
-$total_cents = $price_cents + $fee_cents;    // buyer pays price + fee
+$total_cents = $price_cents + $fee_cents;
 
 $price_rs = number_format($price_cents / 100, 2);
 $fee_rs   = number_format($fee_cents   / 100, 2);
 $total_rs = number_format($total_cents / 100, 2);
 
-/* ===================== File URL ===================== */
+/* ------------------ File URL (if you ever link it) ------------------ */
 $raw_fp   = trim((string)($note['file_path'] ?? ''));
-$file_url = $raw_fp ? normalize_web_path($raw_fp) : '';
+$file_url = $raw_fp ? to_web_path($raw_fp) : '';
 $ext      = strtolower((string)($note['ext'] ?? ''));
 
-/* ===================== Preview Images ===================== */
-/* 1) Prefer DB fields preview_image_1..3 (as web paths).
-   2) If DB fields are empty, fall back to folder /uploads/previews/note_{id}/page{1..3}.(jpg|png|webp). */
+/* ------------------ Preview Images ------------------ */
 $preview_images = [];
-$db_previews = [
-  $note['preview_image_1'] ?? '',
-  $note['preview_image_2'] ?? '',
-  $note['preview_image_3'] ?? '',
-];
-
-foreach ($db_previews as $p) {
-  $p = trim((string)$p);
-  if ($p !== '') $preview_images[] = normalize_web_path($p);
+foreach (['preview_image_1','preview_image_2','preview_image_3'] as $k) {
+  $v = trim((string)($note[$k] ?? ''));
+  if ($v !== '') $preview_images[] = to_web_path($v);
 }
 
 if (count($preview_images) === 0) {
-  // fallback scan
-  $scriptDir  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');     // e.g. /StudyBuddy/pages
-  $UPLOAD_WEB = $scriptDir . '/uploads/';
+  // Fallback to /uploads/previews/note_{id}/page{1..3}.(jpg|jpeg|png|webp)
+  $baseWeb = app_base_web(); // e.g. "/StudyBuddy"
   $preview_dir_disk = __DIR__ . "/uploads/previews/note_" . $note_id;
-  $preview_dir_web  = $UPLOAD_WEB . "previews/note_" . $note_id . '/';
+  $preview_dir_web  = rtrim($baseWeb, '/') . "/uploads/previews/note_" . $note_id . '/';
 
   if (is_dir($preview_dir_disk)) {
     foreach ([1,2,3] as $i) {
       foreach (['jpg','jpeg','png','webp'] as $imgExt) {
         $fn = "page{$i}.{$imgExt}";
-        $disk = $preview_dir_disk . '/' . $fn;
-        if (is_file($disk)) {
+        if (is_file($preview_dir_disk . '/' . $fn)) {
           $preview_images[] = $preview_dir_web . $fn;
           break;
         }
@@ -96,6 +120,9 @@ if (count($preview_images) === 0) {
     }
   }
 }
+
+// Always show 3 panels — missing ones get the placeholder
+$defaultPreview = app_base_web() . '/assets/images/no-preview.png';
 
 $CSRF  = csrf_token();
 $title = "Note • " . htmlspecialchars($note['title']);
@@ -180,30 +207,24 @@ include __DIR__ . '/header.php';
 
         <div class="p-6">
           <div id="preview" class="tab-content active">
-            <?php if (!empty($preview_images)): ?>
-              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                <div class="flex items-center">
-                  <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
-                  <span class="text-sm text-yellow-800">Preview shows seller-provided sample pages.</span>
-                </div>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <div class="flex items-center">
+                <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
+                <span class="text-sm text-yellow-800">Preview shows seller-provided sample pages.</span>
               </div>
+            </div>
 
-              <div class="space-y-4">
-                <?php foreach ($preview_images as $i => $imgUrl): ?>
-                  <div class="border border-gray-200 rounded-lg overflow-hidden bg-white relative">
-                    <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs">Page <?= $i+1 ?></div>
-                    <div class="absolute top-2 right-2 bg-red-100 text-red-800 px-2 py-1 rounded text-xs">Preview Only</div>
-                    <img src="<?= htmlspecialchars($imgUrl) ?>" alt="Preview page <?= $i+1 ?>" class="w-full h-auto max-h-[38rem] object-contain select-none pointer-events-none">
-                  </div>
-                <?php endforeach; ?>
-              </div>
-            <?php else: ?>
-              <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
-                <i class="fas fa-image text-4xl text-gray-400 mb-4"></i>
-                <p class="text-sm text-gray-600">No preview images were provided by the seller.</p>
-                <p class="text-xs text-gray-500 mt-1">Full document available after purchase.</p>
-              </div>
-            <?php endif; ?>
+            <div class="space-y-4">
+              <?php for ($i = 0; $i < 3; $i++):
+                $imgUrl = $preview_images[$i] ?? $defaultPreview;
+              ?>
+                <div class="border border-gray-200 rounded-lg overflow-hidden bg-white relative">
+                  <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs">Page <?= $i+1 ?></div>
+                  <div class="absolute top-2 right-2 bg-red-100 text-red-800 px-2 py-1 rounded text-xs">Preview Only</div>
+                  <img src="<?= htmlspecialchars($imgUrl) ?>" alt="Preview page <?= $i+1 ?>" class="w-full h-auto max-h-[38rem] object-contain select-none pointer-events-none">
+                </div>
+              <?php endfor; ?>
+            </div>
           </div>
         </div>
       </div>
@@ -256,6 +277,7 @@ include __DIR__ . '/header.php';
         <p class="text-xs text-gray-500 mb-4">
           You pay the Material Price + Platform Fee. (The fee is deducted from the seller's payout.)
         </p>
+
         <?php if (is_logged_in()): ?>
           <button class="w-full bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90"
             onclick="showPurchaseModal()">Purchase Now</button>

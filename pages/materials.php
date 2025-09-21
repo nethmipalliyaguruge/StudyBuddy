@@ -5,9 +5,9 @@ require_once __DIR__.'/../config/helpers.php';
 $title = 'Browse Materials';
 
 /* -------------------- Inputs -------------------- */
-$sort   = $_GET['sort'] ?? 'newest';   // future use
+$sort   = $_GET['sort'] ?? 'newest';
 $page   = max(1, (int)($_GET['page'] ?? 1));
-$per    = 9;                           // 9 notes per page
+$per    = 9;
 $offset = ($page - 1) * $per;
 
 // School (array of IDs)
@@ -56,7 +56,6 @@ if (!empty($level_ids)) {
 }
 
 if (!empty($file_types)) {
-  // Match by extension of file_path
   $place = implode(',', array_fill(0, count($file_types), '?'));
   $where[] = "LOWER(SUBSTRING_INDEX(n.file_path,'.',-1)) IN ($place)";
   array_push($params, ...$file_types);
@@ -67,7 +66,8 @@ if ($max_cents !== null) { $where[] = "n.price_cents <= ?"; $params[] = $max_cen
 
 $where_sql = 'WHERE ' . implode(' AND ', $where);
 
-$countSql = "
+/* -------------------- Count + Fetch -------------------- */
+$stmt = $pdo->prepare("
   SELECT COUNT(*) AS c
   FROM notes n
   JOIN modules m ON m.id = n.module_id
@@ -75,23 +75,19 @@ $countSql = "
   JOIN schools s ON s.id = l.school_id
   JOIN users   u ON u.id = n.seller_id
   $where_sql
-";
-$stmt = $pdo->prepare($countSql);
+");
 $stmt->execute($params);
 $total = (int)$stmt->fetchColumn();
 
-// Calculate pagination properly
 $totalPages = max(1, (int)ceil($total / $per));
 $page = min($page, $totalPages);
 $offset = ($page - 1) * $per;
 
-/* ---------------- Sorting ---------------- */
 $orderBy = "n.created_at DESC";
 if ($sort === 'price_asc')  $orderBy = "n.price_cents ASC";
 if ($sort === 'price_desc') $orderBy = "n.price_cents DESC";
 
-/* -------------------- Fetch notes -------------------- */
-$sql = "
+$stmt = $pdo->prepare("
 SELECT
   n.id, n.title, n.description, n.file_path, n.price_cents, n.created_at,
   m.id AS module_id, m.title AS module_title,
@@ -105,14 +101,11 @@ JOIN schools s ON s.id = l.school_id
 $where_sql
 ORDER BY $orderBy
 LIMIT $per OFFSET $offset
-";
-$stmt = $pdo->prepare($sql);
+");
 $stmt->execute($params);
 $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-/* Note: Removed the duplicate count query since we already have $total */
-
-/* -------------------- Helpers for checked state -------------------- */
+/* -------------------- Helpers -------------------- */
 function isCheckedKey(array $arr, string $key): string {
   return in_array($key, $arr, true) ? 'checked' : '';
 }
@@ -120,102 +113,101 @@ function isChecked(array $arr, $val): string {
   return in_array((string)$val, array_map('strval',$arr), true) ? 'checked' : '';
 }
 
+/* A small helper to render the filter form (used twice: desktop + mobile) */
+function render_filters($schools, $school_ids, $level_ui, $level_keys, $file_types, $min_rs, $max_rs, $sort) { ?>
+  <form class="bg-card border border-border rounded-lg p-6" method="get">
+    <h2 class="text-lg font-medium text-foreground mb-4">Filters</h2>
+    <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
+    <input type="hidden" name="page" value="1">
+
+    <!-- School -->
+    <div class="mb-6">
+      <h3 class="text-sm font-medium text-foreground mb-3">School</h3>
+      <div class="space-y-2">
+        <?php foreach ($schools as $s): ?>
+          <?php $isSelected = isChecked($school_ids, $s['id']); ?>
+          <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
+            <span><?= htmlspecialchars($s['name']) ?></span>
+            <input type="checkbox" name="school[]" value="<?= (int)$s['id'] ?>" class="sr-only filter-checkbox" <?= $isSelected ?>>
+          </label>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <!-- Level -->
+    <div class="mb-6">
+      <h3 class="text-sm font-medium text-foreground mb-3">Level</h3>
+      <div class="space-y-2">
+        <?php foreach ($level_ui as $L): ?>
+          <?php $isSelected = isCheckedKey($level_keys, $L['key']); ?>
+          <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
+            <span><?= htmlspecialchars($L['label']) ?></span>
+            <input type="checkbox" name="level[]" value="<?= $L['key'] ?>" class="sr-only filter-checkbox" <?= $isSelected ?>>
+          </label>
+        <?php endforeach; ?>
+      </div>
+    </div>
+
+    <!-- Price -->
+    <div class="mb-6">
+      <h3 class="text-sm font-medium text-foreground mb-3">Price Range (LKR)</h3>
+      <div class="flex items-center space-x-2">
+        <input type="number" step="0.01" min="0" name="min" value="<?= $min_rs!==null?htmlspecialchars($min_rs):'' ?>"
+               class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Min">
+        <span class="text-muted-foreground">-</span>
+        <input type="number" step="0.01" min="0" name="max" value="<?= $max_rs!==null?htmlspecialchars($max_rs):'' ?>"
+               class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Max">
+      </div>
+    </div>
+
+    <!-- File Type -->
+    <div class="mb-6">
+      <h3 class="text-sm font-medium text-foreground mb-3">File Type</h3>
+      <?php $ftAll = ['pdf'=>'PDF','doc'=>'DOC','docx'=>'DOCX','ppt'=>'PPT','pptx'=>'PPTX'];
+      foreach ($ftAll as $k=>$lbl): ?>
+        <?php $isSelected = in_array($k,$file_types,true); ?>
+        <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer mb-2 transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
+          <span><?= $lbl ?></span>
+          <input type="checkbox" name="ft[]" value="<?= $k ?>" class="sr-only filter-checkbox" <?= $isSelected ? 'checked' : '' ?>>
+        </label>
+      <?php endforeach; ?>
+    </div>
+
+    <button class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
+      Apply Filters
+    </button>
+    <button type="button"
+            onclick="window.location.href='materials.php'"
+            class="w-full mt-2 bg-muted text-foreground py-2 px-4 rounded-md hover:bg-muted-foreground/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
+      Remove Filters
+    </button>
+  </form>
+<?php }
+
 include __DIR__ . '/header.php';
 ?>
 <body class="min-h-screen flex flex-col">
-    <main class="flex-1">
-<main class="bg-muted text-foreground">
+<main class="flex-1 bg-muted text-foreground">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-    <div class="mb-8">
-      <h1 class="text-2xl font-bold text-foreground">Browse Study Materials</h1>
-      <p class="mt-1 text-sm text-muted-foreground">Find and purchase high-quality study materials for your courses</p>
+    <div class="mb-6 flex items-start justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-foreground">Browse Study Materials</h1>
+        <p class="mt-1 text-sm text-muted-foreground">Find and purchase high-quality study materials for your courses</p>
+      </div>
+
+      <!-- Mobile filter button -->
+      <button id="openFilters"
+              class="lg:hidden inline-flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-white hover:bg-muted text-sm">
+        <i class="fas fa-filter"></i>
+        Filters
+      </button>
     </div>
 
     <div class="flex flex-col lg:flex-row gap-6">
-      <!-- Filters Sidebar -->
-      <aside class="w-full lg:w-1/4">
-        <form class="bg-card border border-border rounded-lg p-6 sticky top-24" method="get">
-          <h2 class="text-lg font-medium text-foreground mb-4">Filters</h2>
-
-          <!-- keep sort + reset page when submitting filters -->
-          <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
-          <input type="hidden" name="page" value="1">
-
-          <!-- School (checkboxes) -->
-          <div class="mb-6">
-            <h3 class="text-sm font-medium text-foreground mb-3">School</h3>
-            <div class="space-y-2">
-              <?php foreach ($schools as $s): ?>
-                <?php $isSelected = isChecked($school_ids, $s['id']); ?>
-                <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
-                  <span><?= htmlspecialchars($s['name']) ?></span>
-                  <input type="checkbox"
-                         name="school[]"
-                         value="<?= (int)$s['id'] ?>"
-                         class="sr-only filter-checkbox"
-                         <?= $isSelected ?>>
-                </label>
-              <?php endforeach; ?>
-            </div>
-          </div>
-
-          <!-- Level (only L4/L5/L6, mapped) -->
-          <div class="mb-6">
-            <h3 class="text-sm font-medium text-foreground mb-3">Level</h3>
-            <div class="space-y-2">
-              <?php foreach ($level_ui as $L): ?>
-                <?php $isSelected = isCheckedKey($level_keys, $L['key']); ?>
-                <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
-                  <span><?= htmlspecialchars($L['label']) ?></span>
-                  <input type="checkbox"
-                         name="level[]"
-                         value="<?= $L['key'] ?>"
-                         class="sr-only filter-checkbox"
-                         <?= $isSelected ?>>
-                </label>
-              <?php endforeach; ?>
-            </div>
-          </div>
-
-          <!-- Price -->
-          <div class="mb-6">
-            <h3 class="text-sm font-medium text-foreground mb-3">Price Range (LKR)</h3>
-            <div class="flex items-center space-x-2">
-              <input type="number" step="0.01" min="0" name="min" value="<?= $min_rs!==null?htmlspecialchars($min_rs):'' ?>"
-                     class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Min">
-              <span class="text-muted-foreground">-</span>
-              <input type="number" step="0.01" min="0" name="max" value="<?= $max_rs!==null?htmlspecialchars($max_rs):'' ?>"
-                     class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Max">
-            </div>
-          </div>
-
-          <!-- File Type -->
-          <div class="mb-6">
-            <h3 class="text-sm font-medium text-foreground mb-3">File Type</h3>
-            <?php $ftAll = ['pdf'=>'PDF','doc'=>'DOC','docx'=>'DOCX','ppt'=>'PPT','pptx'=>'PPTX'];
-            foreach ($ftAll as $k=>$lbl): ?>
-              <?php $isSelected = in_array($k,$file_types,true); ?>
-              <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer mb-2 transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
-                <span><?= $lbl ?></span>
-                <input type="checkbox"
-                       name="ft[]"
-                       value="<?= $k ?>"
-                       class="sr-only filter-checkbox"
-                       <?= $isSelected ? 'checked' : '' ?>>
-              </label>
-            <?php endforeach; ?>
-          </div>
-
-          <button class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
-            Apply Filters
-          </button>
-          <button type="button"
-                  onclick="window.location.href='materials.php'"
-                  class="w-full mt-2 bg-muted text-foreground py-2 px-4 rounded-md hover:bg-muted-foreground/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
-            Remove Filters
-          </button>
-        </form>
+      <!-- Desktop Filters (visible ≥ lg) -->
+      <aside class="w-full lg:w-1/4 hidden lg:block">
+        <?php render_filters($schools,$school_ids,$level_ui,$level_keys,$file_types,$min_rs,$max_rs,$sort); ?>
       </aside>
 
       <!-- Results -->
@@ -223,7 +215,7 @@ include __DIR__ . '/header.php';
         <div class="bg-card border border-border rounded-lg p-4 mb-6">
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <h1 class="text-xl font-bold text-foreground">Study Materials</h1>
+              <h2 class="text-xl font-bold text-foreground">Study Materials</h2>
               <p class="text-sm text-muted-foreground">Showing <?= count($notes) ?> of <?= $total ?> results</p>
             </div>
             <div>
@@ -258,9 +250,7 @@ include __DIR__ . '/header.php';
                 <h3 class="text-lg font-medium text-foreground mb-2"><?= htmlspecialchars($n['title']) ?></h3>
                 <p class="text-sm text-muted-foreground mb-4 flex-1 line-clamp-3"><?= htmlspecialchars($n['description']) ?></p>
                 <div class="flex items-center justify-between mb-4 mt-auto">
-                  <div>
-                    <p class="text-xs text-muted-foreground"><?= htmlspecialchars($n['level_name']) ?></p>
-                  </div>
+                  <p class="text-xs text-muted-foreground"><?= htmlspecialchars($n['level_name']) ?></p>
                   <p class="text-lg font-bold text-foreground">LKR <?= number_format($n['price_cents']/100, 2) ?></p>
                 </div>
                 <a class="w-full inline-block text-center bg-primary text-white py-2 px-4 rounded-md text-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring mt-auto"
@@ -285,12 +275,11 @@ include __DIR__ . '/header.php';
           <?php
             $prevDisabled = $page <= 1 ? 'pointer-events-none opacity-50' : '';
             $nextDisabled = $page >= $totalPages ? 'pointer-events-none opacity-50' : '';
-            
-            // Build query string for pagination links
+
             $currentParams = $_GET;
             $currentParams['page'] = max(1, $page-1);
             $prevUrl = '?' . http_build_query($currentParams);
-            
+
             $currentParams['page'] = min($totalPages, $page+1);
             $nextUrl = '?' . http_build_query($currentParams);
           ?>
@@ -310,14 +299,29 @@ include __DIR__ . '/header.php';
           <a class="relative inline-flex items-center px-4 py-2 border border-border text-sm font-medium rounded-md text-foreground bg-white hover:bg-muted <?= $nextDisabled ?>"
              href="<?= $nextUrl ?>">Next</a>
         </div>
-
       </section>
     </div>
   </div>
 </main>
 
+<!-- Mobile Filter Drawer -->
+<div id="filterDrawer" class="fixed inset-0 z-50 hidden">
+  <!-- overlay -->
+  <div id="filterOverlay" class="absolute inset-0 bg-black/40"></div>
+  <!-- panel -->
+  <div class="absolute left-0 top-0 h-full w-11/12 max-w-sm bg-white shadow-xl p-4 overflow-y-auto">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-lg font-semibold">Filters</h3>
+      <button id="closeFilters" class="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <?php render_filters($schools,$school_ids,$level_ui,$level_keys,$file_types,$min_rs,$max_rs,$sort); ?>
+  </div>
+</div>
+
 <script>
-  // Sort control: change only the 'sort' param, reset page=1, preserve the rest.
+  // Sort control
   document.getElementById('sortSelect')?.addEventListener('change', function () {
     const u = new URL(location.href);
     u.searchParams.set('sort', this.value);
@@ -325,29 +329,37 @@ include __DIR__ . '/header.php';
     location.href = u.toString();
   });
 
-  // Add interactive filter styling
-  document.addEventListener('DOMContentLoaded', function() {
-    // Get all filter checkboxes
-    const filterCheckboxes = document.querySelectorAll('.filter-checkbox');
-    
-    filterCheckboxes.forEach(function(checkbox) {
-      checkbox.addEventListener('change', function() {
+  // Checkbox styling (both forms)
+  function wireFilterLabels(root=document){
+    root.querySelectorAll('.filter-checkbox').forEach(function (checkbox) {
+      checkbox.addEventListener('change', function () {
         const label = this.closest('.filter-option');
-        
+        if (!label) return;
         if (this.checked) {
-          // Remove unselected classes
-          label.classList.remove('text-foreground/80', 'border-border', 'hover:bg-muted');
-          // Add selected classes
-          label.classList.add('bg-green-100', 'border-green-300', 'text-green-800');
+          label.classList.remove('text-foreground/80','border-border','hover:bg-muted');
+          label.classList.add('bg-green-100','border-green-300','text-green-800');
         } else {
-          // Remove selected classes
-          label.classList.remove('bg-green-100', 'border-green-300', 'text-green-800');
-          // Add unselected classes
-          label.classList.add('text-foreground/80', 'border-border', 'hover:bg-muted');
+          label.classList.remove('bg-green-100','border-green-300','text-green-800');
+          label.classList.add('text-foreground/80','border-border','hover:bg-muted');
         }
       });
     });
-  });
+  }
+  wireFilterLabels(); // desktop
+  wireFilterLabels(document.getElementById('filterDrawer')); // mobile
+
+  // Mobile drawer open/close
+  const drawer = document.getElementById('filterDrawer');
+  const openBtn = document.getElementById('openFilters');
+  const closeBtn = document.getElementById('closeFilters');
+  const overlay = document.getElementById('filterOverlay');
+
+  function openFilters(){ drawer.classList.remove('hidden'); document.body.style.overflow='hidden'; }
+  function closeFilters(){ drawer.classList.add('hidden'); document.body.style.overflow=''; }
+
+  openBtn?.addEventListener('click', openFilters);
+  closeBtn?.addEventListener('click', closeFilters);
+  overlay?.addEventListener('click', closeFilters);
 </script>
 
 <?php include __DIR__ . '/footer.php'; ?>

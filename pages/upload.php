@@ -88,11 +88,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   $notePrevDir = $previewRoot . "/note_{$note_id}";
   if (!is_dir($notePrevDir)) @mkdir($notePrevDir, 0777, true);
 
-  for ($i=1; $i<=3; $i++) {
-    $f = $_FILES["preview{$i}"];
-    $extP = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));
-    $target = $notePrevDir . "/page{$i}." . $extP;
-    move_uploaded_file($f['tmp_name'], $target);
+  if (count($preview_images) === 0) {
+  $baseWeb = app_base_web(); // e.g. "/StudyBuddy"
+  $preview_dir_disk = __DIR__ . "/uploads/previews/note_" . $note_id;
+  $preview_dir_web  = rtrim($baseWeb, '/') . "/uploads/previews/note_" . $note_id . '/';
+
+  if (is_dir($preview_dir_disk)) {
+    foreach ([1,2,3] as $i) {
+      foreach (['jpg','jpeg','png','webp'] as $imgExt) {
+        $fn = "page{$i}.{$imgExt}";
+        if (is_file($preview_dir_disk . '/' . $fn)) {
+          $preview_images[] = $preview_dir_web . $fn;
+          break;
+        }
+      }
+    }
+  }
   }
 
   flash('ok','Note uploaded successfully!');

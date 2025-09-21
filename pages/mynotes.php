@@ -128,7 +128,7 @@ $total_earn_rs = $total_earn_cents / 100;
 $title = "My Notes - StudyBuddy APIIT";
 include 'header.php'; 
 ?>
-
+<body class="min-h-screen flex flex-col overflow-x-hidden">
 <main class="bg-muted text-foreground">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div class="flex justify-between items-center mb-6">

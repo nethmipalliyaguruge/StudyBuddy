@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/helpers.php';
 $u = current_user(); // null if guest
-$current = basename($_SERVER['PHP_SELF']); 
+$current = basename($_SERVER['PHP_SELF']);
 
 function navClasses($file, $current) {
   $base = "px-3 py-2 rounded-md text-sm font-medium";
@@ -20,10 +20,13 @@ function navClasses($file, $current) {
 
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <script>
     tailwind.config = {
       theme: {
         extend: {
+          fontFamily: { sans: ['Inter','ui-sans-serif','system-ui'] },
           colors: {
             primary: '#006644',
             'primary-foreground': '#ffffff',
@@ -70,13 +73,9 @@ function navClasses($file, $current) {
       .truncate-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
     }
   </style>
-
-  <!-- Icons + Font -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-  <style> body { font-family: 'Inter', sans-serif; } </style>
 </head>
 <body class="bg-background text-foreground flex flex-col min-h-screen">
+
 <?php if ($u && $u['role'] === 'admin'): ?>
   <!-- 🔹 Admin Header -->
   <header class="bg-white border-b border-border">
@@ -104,39 +103,50 @@ function navClasses($file, $current) {
         <i class="fas fa-graduation-cap text-2xl text-primary"></i>
         <h1 class="text-xl font-bold text-primary">StudyBuddy APIIT</h1>
       </a>
+
+      <!-- Desktop links -->
       <div class="hidden md:flex space-x-6">
         <a href="index.php" class="text-primary hover:text-accent">Home</a>
         <a href="materials.php" class="text-gray-600 hover:text-primary">Study Materials</a>
       </div>
-      <div class="flex space-x-4">
+
+      <!-- Desktop auth -->
+      <div class="hidden md:flex space-x-4">
         <a href="login.php" class="px-4 py-2 text-primary border border-primary rounded-md hover:bg-primary hover:text-white">Login</a>
         <a href="login.php?tab=register" class="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90">Register</a>
       </div>
-      <!-- Mobile menu button -->
-      <button id="mobile-menu-btn" class="md:hidden text-gray-600">
+
+      <!-- Mobile hamburger -->
+      <button id="mobile-menu-btn-landing" class="md:hidden text-gray-600" aria-label="Open menu" aria-expanded="false">
         <i class="fas fa-bars text-xl"></i>
       </button>
     </nav>
-    <!-- Mobile menu -->
-    <div id="mobile-menu" class="hidden md:hidden mt-4 space-y-2 px-4 pb-4">
+
+    <!-- Mobile menu (landing) -->
+    <div id="mobile-menu-landing" class="hidden md:hidden mt-2 space-y-2 px-4 pb-4 border-t border-border">
       <a href="index.php" class="block py-2 text-primary">Home</a>
       <a href="materials.php" class="block py-2 text-gray-600">Study Materials</a>
+      <div class="pt-2 flex gap-3">
+        <a href="login.php" class="flex-1 text-center px-4 py-2 text-primary border border-primary rounded-md hover:bg-primary hover:text-white">Login</a>
+        <a href="login.php?tab=register" class="flex-1 text-center px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90">Register</a>
+      </div>
     </div>
   </header>
 
 <?php else: ?>
 
-  <!-- Default Header (materials.php, mynotes.php, mypurchases.php, etc.) -->
+  <!-- 🔹 Default Header (materials.php, mynotes.php, mypurchases.php, etc.) -->
   <nav class="bg-white border-b border-border sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between h-16 items-center">
-        <!-- Logo -->
+
+        <!-- Brand -->
         <a href="index.php" class="flex items-center space-x-2">
           <i class="fas fa-graduation-cap text-2xl text-primary"></i>
           <h1 class="text-xl font-bold text-primary">StudyBuddy APIIT</h1>
         </a>
 
-        <!-- Main nav -->
+        <!-- Desktop nav -->
         <div class="hidden md:flex space-x-4">
           <a href="dashboard.php"   class="<?= navClasses('dashboard.php', $current) ?>">Dashboard</a>
           <a href="materials.php"   class="<?= navClasses('materials.php', $current) ?>">Study Materials</a>
@@ -144,14 +154,13 @@ function navClasses($file, $current) {
           <a href="mypurchases.php" class="<?= navClasses('mypurchases.php', $current) ?>">My Purchases</a>
         </div>
 
-        <!-- Right side: auth + cart -->
-        <div class="flex items-center space-x-4">
+        <!-- Desktop right -->
+        <div class="hidden md:flex items-center space-x-4">
           <?php if ($u): ?>
             <span class="text-sm font-medium text-slate-700"><?= htmlspecialchars($u['full_name']) ?></span>
             <a href="profile.php" class="text-sm font-medium text-slate-700 hover:text-primary">Profile</a>
             <a href="logout.php"  class="text-sm font-medium text-slate-700 hover:text-primary">Logout</a>
           <?php else: ?>
-            <!-- 👇 this is the bit you were missing for guests -->
             <a href="login.php" class="text-sm font-medium text-slate-700 hover:text-primary">Login</a>
             <a href="login.php?tab=register" class="text-sm font-medium text-slate-700 hover:text-primary">Register</a>
           <?php endif; ?>
@@ -167,18 +176,75 @@ function navClasses($file, $current) {
             <?php endif; ?>
           </a>
         </div>
+
+        <!-- Mobile hamburger (default header) -->
+        <button id="mobile-menu-btn-main" class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-600 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring" aria-label="Open menu" aria-expanded="false">
+          <i class="fas fa-bars text-xl"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile menu (default header) -->
+    <div id="mobile-menu-main" class="md:hidden hidden border-t border-border">
+      <div class="px-4 py-3 space-y-1">
+        <a href="dashboard.php"   class="block px-2 py-2 rounded-md text-sm hover:bg-muted <?= $current==='dashboard.php'   ? 'text-primary' : 'text-slate-700' ?>">Dashboard</a>
+        <a href="materials.php"   class="block px-2 py-2 rounded-md text-sm hover:bg-muted <?= $current==='materials.php'   ? 'text-primary' : 'text-slate-700' ?>">Study Materials</a>
+        <a href="mynotes.php"     class="block px-2 py-2 rounded-md text-sm hover:bg-muted <?= $current==='mynotes.php'     ? 'text-primary' : 'text-slate-700' ?>">My Notes</a>
+        <a href="mypurchases.php" class="block px-2 py-2 rounded-md text-sm hover:bg-muted <?= $current==='mypurchases.php' ? 'text-primary' : 'text-slate-700' ?>">My Purchases</a>
+
+        <div class="my-2 border-t border-border"></div>
+
+        <?php if ($u): ?>
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-slate-700"><?= htmlspecialchars($u['full_name']) ?></span>
+            <a href="profile.php" class="text-sm font-medium text-primary">Profile</a>
+          </div>
+          <a href="logout.php" class="mt-2 block w-full text-center px-3 py-2 rounded-md border border-border hover:bg-muted text-sm font-medium text-slate-700">Logout</a>
+        <?php else: ?>
+          <div class="flex gap-2 pt-1">
+            <a href="login.php" class="flex-1 text-center px-3 py-2 rounded-md border border-primary text-primary hover:bg-primary hover:text-white text-sm">Login</a>
+            <a href="login.php?tab=register" class="flex-1 text-center px-3 py-2 rounded-md bg-primary text-white hover:bg-primary/90 text-sm">Register</a>
+          </div>
+        <?php endif; ?>
+
+        <?php $cartCount = isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0; ?>
+        <a href="cart.php" class="mt-2 relative flex items-center justify-between px-3 py-2 rounded-md border border-border hover:bg-muted text-sm">
+          <span class="inline-flex items-center gap-2">
+            <i class="fas fa-shopping-cart"></i> Cart
+          </span>
+          <?php if ($cartCount): ?>
+            <span class="ml-2 inline-flex items-center justify-center text-xs font-semibold bg-primary text-white rounded-full min-w-[1.25rem] h-5 px-1"><?= (int)$cartCount ?></span>
+          <?php endif; ?>
+        </a>
       </div>
     </div>
   </nav>
 <?php endif; ?>
 
 <script>
-  // Mobile menu toggle
-  const btn = document.getElementById('mobile-menu-btn');
-  const menu = document.getElementById('mobile-menu');
-  if (btn && menu) {
-    btn.addEventListener('click', () => {
-      menu.classList.toggle('hidden');
-    });
-  }
+  // Landing header mobile toggle
+  (function(){
+    const btn = document.getElementById('mobile-menu-btn-landing');
+    const menu = document.getElementById('mobile-menu-landing');
+    if (btn && menu) {
+      btn.addEventListener('click', () => {
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!expanded));
+        menu.classList.toggle('hidden');
+      });
+    }
+  })();
+
+  // Default header mobile toggle
+  (function(){
+    const btn = document.getElementById('mobile-menu-btn-main');
+    const menu = document.getElementById('mobile-menu-main');
+    if (btn && menu) {
+      btn.addEventListener('click', () => {
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!expanded));
+        menu.classList.toggle('hidden');
+      });
+    }
+  })();
 </script>
