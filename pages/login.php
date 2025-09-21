@@ -33,16 +33,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($u['is_blocked'])) {
           flash('err', 'Your account is blocked. Please contact admin.');
         } else {
-          // Only store the user id in session
           $_SESSION['uid'] = $u['id'];
 
-          // Where to send them after login (adjust if you like)
-          if ($u['role'] === 'admin') {
-          header('Location: admin_dashboard.php');
-        } else {
-          header('Location: dashboard.php');
-        }
-        exit;
+          // 👇 use the return URL if provided, else fallback
+          $to = get_return_to($u['role'] === 'admin' ? 'admin_dashboard.php' : 'dashboard.php');
+          safe_redirect($to);
         }
       } else {
         flash('err', 'Invalid credentials.');
@@ -155,6 +150,7 @@ $title = "Login / Register - StudyBuddy APIIT";
       <form id="loginForm" class="space-y-4 <?= $activeTab==='login' ? '' : 'hidden'; ?>" method="post" action="">
         <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
         <input type="hidden" name="__action" value="login">
+        <input type="hidden" name="redirect" value="<?= htmlspecialchars($_GET['redirect'] ?? '') ?>">
 
         <div>
           <label class="block text-sm font-medium text-foreground mb-1">Email</label>
