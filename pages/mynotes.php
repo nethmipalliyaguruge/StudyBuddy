@@ -106,10 +106,24 @@ $modules = $pdo->query("
   ORDER BY s.name, l.name, mo.title
 ")->fetchAll(PDO::FETCH_ASSOC);
 
-/* Stats (replace with real sales/ratings when you add those tables) */
-$total_notes   = count($notes);
-$total_sales   = 0;
-$total_earn_rs = 0.00;
+/* Stats - Get real sales and earnings data */
+$total_notes = count($notes);
+
+// Get total sales count and earnings for this seller
+$salesQuery = $pdo->prepare("
+    SELECT 
+        COUNT(*) as total_sales,
+        COALESCE(SUM(n.price_cents), 0) as total_earnings_cents
+    FROM purchases p
+    JOIN notes n ON n.id = p.note_id
+    WHERE n.seller_id = ?
+");
+$salesQuery->execute([(int)$u['id']]);
+$salesData = $salesQuery->fetch(PDO::FETCH_ASSOC);
+
+$total_sales = (int)$salesData['total_sales'];
+$total_earn_cents = (int)$salesData['total_earnings_cents'];
+$total_earn_rs = $total_earn_cents / 100;
 
 $title = "My Notes - StudyBuddy APIIT";
 include 'header.php'; 
@@ -168,7 +182,7 @@ include 'header.php';
           </div>
           <div class="ml-5 w-0 flex-1">
             <dt class="text-sm font-medium text-muted-foreground truncate">Total Earnings</dt>
-            <dd class="text-2xl font-semibold text-foreground"><?= number_format($total_earn_rs,2) ?></dd>
+            <dd class="text-2xl font-semibold text-foreground">LKR <?= number_format($total_earn_rs,2) ?></dd>
           </div>
         </div>
       </div>

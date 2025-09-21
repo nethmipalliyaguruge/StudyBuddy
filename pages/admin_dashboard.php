@@ -151,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $platform_fee_cents = (int)$pdo->query("
   SELECT COALESCE(SUM(fee_cents), 0)
   FROM purchases
-  WHERE status = 'completed'
+  WHERE status = 'paid'
 ")->fetchColumn();
 
 
@@ -177,7 +177,7 @@ $modules = $pdo->query("
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 $users = $pdo->query("
-  SELECT id, full_name, email, role, is_blocked, created_at
+  SELECT id, full_name, email, phone, role, is_blocked, created_at
   FROM users
   ORDER BY created_at DESC, id DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
@@ -490,6 +490,7 @@ include __DIR__ . '/header.php';
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Name</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Email</th>
+                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Phone</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Role</th>
                 <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Blocked?</th>
                 <th class="px-6 py-3 text-right text-xs font-semibold text-muted-foreground uppercase">Actions</th>
@@ -500,6 +501,7 @@ include __DIR__ . '/header.php';
               <tr>
                 <td class="px-6 py-3 text-sm font-medium"><?= htmlspecialchars($uu['full_name']) ?></td>
                 <td class="px-6 py-3 text-sm"><?= htmlspecialchars($uu['email']) ?></td>
+                <td class="px-6 py-3 text-sm"><?= htmlspecialchars($uu['phone'] ?? '—') ?></td>
                 <td class="px-6 py-3 text-sm">
                   <form method="post" class="inline-flex items-center gap-2">
                     <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
@@ -635,57 +637,57 @@ include __DIR__ . '/header.php';
 
       <!-- TRANSACTIONS -->
       <?php if ($tab === 'transactions'): ?>
-      <section>
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-medium">Transactions</h2>
-          <p class="text-sm text-muted-foreground">All purchase records across the platform.</p>
-        </div>
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-medium">Transactions</h2>
+            <p class="text-sm text-muted-foreground">All purchase records across the platform.</p>
+          </div>
 
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-border">
-            <thead class="bg-muted">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Date</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Buyer</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Seller</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Material</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Price</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Fee (5%)</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Seller Gets</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Buyer Paid</th>
-                <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-border">
-              <?php if (!$purchases): ?>
-                <tr><td colspan="9" class="px-6 py-6 text-center text-sm text-muted-foreground">No transactions yet.</td></tr>
-              <?php endif; ?>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-border">
+              <thead class="bg-muted">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Date</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Buyer</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Seller</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Material</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Price</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Fee (5%)</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Seller Gets</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Buyer Paid</th>
+                  <th class="px-6 py-3 text-left text-xs font-semibold text-muted-foreground uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-border">
+                <?php if (!$purchases): ?>
+                  <tr><td colspan="9" class="px-6 py-6 text-center text-sm text-muted-foreground">No transactions yet.</td></tr>
+                <?php endif; ?>
 
-              <?php foreach ($purchases as $p): ?>
-              <tr>
-                <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['created_at']) ?></td>
-                <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['buyer_name']) ?></td>
-                <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['seller_name']) ?></td>
-                <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['note_title']) ?></td>
-                <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['base_price_cents']) ?></td>
-                <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['fee_cents']) ?></td>
-                <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['seller_earnings_cents']) ?></td>
-                <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['total_paid_cents']) ?></td>
-                <td class="px-6 py-3 text-sm">
-                  <?php if ($p['status']==='completed'): ?>
-                    <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Completed</span>
-                  <?php elseif ($p['status']==='processing'): ?>
-                    <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Processing</span>
-                  <?php else: ?>
-                    <span class="px-2 py-1 rounded bg-gray-100 text-gray-800 text-xs font-medium"><?= htmlspecialchars($p['status']) ?></span>
-                  <?php endif; ?>
-                </td>
-              </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
-        </div>
-      </section>
+                <?php foreach ($purchases as $p): ?>
+                  <tr>
+                    <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['created_at']) ?></td>
+                    <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['buyer_name']) ?></td>
+                    <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['seller_name']) ?></td>
+                    <td class="px-6 py-3 text-sm"><?= htmlspecialchars($p['note_title']) ?></td>
+                    <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['base_price_cents']) ?></td>
+                    <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['fee_cents']) ?></td>
+                    <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['seller_earnings_cents']) ?></td>
+                    <td class="px-6 py-3 text-sm">LKR <?= money_rs($p['total_paid_cents']) ?></td>
+                    <td class="px-6 py-3 text-sm">
+                      <?php if ($p['status']==='paid'): ?>
+                        <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-xs font-medium">Paid</span>
+                      <?php elseif ($p['status']==='processing'): ?>
+                        <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 text-xs font-medium">Processing</span>
+                      <?php else: ?>
+                        <span class="px-2 py-1 rounded bg-gray-100 text-gray-800 text-xs font-medium"><?= htmlspecialchars($p['status']) ?></span>
+                      <?php endif; ?>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+              </tbody>
+            </table>
+          </div>
+        </section>
       <?php endif; ?>
 
     </div>
