@@ -29,6 +29,9 @@ $max_rs = isset($_GET['max']) && $_GET['max'] !== '' ? (float)$_GET['max'] : nul
 $min_cents = $min_rs !== null ? (int)round($min_rs*100) : null;
 $max_cents = $max_rs !== null ? (int)round($max_rs*100) : null;
 
+// Free-text search
+$q = isset($_GET['q']) ? trim($_GET['q']) : '';
+
 /* -------------------- Data for filters -------------------- */
 $schools = $pdo->query("SELECT id, name FROM schools ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -46,28 +49,34 @@ $params = [];
 if (!empty($school_ids)) {
   $place = implode(',', array_fill(0, count($school_ids), '?'));
   $where[] = "l.school_id IN ($place)";
-  array_push($params, ...$school_ids);
+  foreach ($school_ids as $sid) { $params[] = (int)$sid; }
 }
 
 if (!empty($level_ids)) {
   $place = implode(',', array_fill(0, count($level_ids), '?'));
   $where[] = "m.level_id IN ($place)";
-  array_push($params, ...$level_ids);
+  foreach ($level_ids as $lid) { $params[] = (int)$lid; }
 }
 
 if (!empty($file_types)) {
   $place = implode(',', array_fill(0, count($file_types), '?'));
   $where[] = "LOWER(SUBSTRING_INDEX(n.file_path,'.',-1)) IN ($place)";
-  array_push($params, ...$file_types);
+  foreach ($file_types as $ft) { $params[] = strtolower($ft); }
 }
 
 if ($min_cents !== null) { $where[] = "n.price_cents >= ?"; $params[] = $min_cents; }
 if ($max_cents !== null) { $where[] = "n.price_cents <= ?"; $params[] = $max_cents; }
 
+if ($q !== '') {
+  $where[] = "(n.title LIKE ? OR n.description LIKE ? OR m.title LIKE ? OR s.name LIKE ?)";
+  $like = "%{$q}%";
+  $params[] = $like; $params[] = $like; $params[] = $like; $params[] = $like;
+}
+
 $where_sql = 'WHERE ' . implode(' AND ', $where);
 
 /* -------------------- Count + Fetch -------------------- */
-$stmt = $pdo->prepare("
+$count_sql = "
   SELECT COUNT(*) AS c
   FROM notes n
   JOIN modules m ON m.id = n.module_id
@@ -75,7 +84,8 @@ $stmt = $pdo->prepare("
   JOIN schools s ON s.id = l.school_id
   JOIN users   u ON u.id = n.seller_id
   $where_sql
-");
+";
+$stmt = $pdo->prepare($count_sql);
 $stmt->execute($params);
 $total = (int)$stmt->fetchColumn();
 
@@ -84,10 +94,10 @@ $page = min($page, $totalPages);
 $offset = ($page - 1) * $per;
 
 $orderBy = "n.created_at DESC";
-if ($sort === 'price_asc')  $orderBy = "n.price_cents ASC";
-if ($sort === 'price_desc') $orderBy = "n.price_cents DESC";
+if ($sort === 'price_asc')  { $orderBy = "n.price_cents ASC"; }
+if ($sort === 'price_desc') { $orderBy = "n.price_cents DESC"; }
 
-$stmt = $pdo->prepare("
+$list_sql = "
 SELECT
   n.id, n.title, n.description, n.file_path, n.price_cents, n.created_at,
   m.id AS module_id, m.title AS module_title,
@@ -101,88 +111,114 @@ JOIN schools s ON s.id = l.school_id
 $where_sql
 ORDER BY $orderBy
 LIMIT $per OFFSET $offset
-");
+";
+$stmt = $pdo->prepare($list_sql);
 $stmt->execute($params);
 $notes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 /* -------------------- Helpers -------------------- */
-function isCheckedKey(array $arr, string $key): string {
-  return in_array($key, $arr, true) ? 'checked' : '';
+if (!function_exists('isCheckedKey')) {
+  function isCheckedKey(array $arr, string $key): string {
+    return in_array($key, $arr, true) ? 'checked' : '';
+  }
 }
-function isChecked(array $arr, $val): string {
-  return in_array((string)$val, array_map('strval',$arr), true) ? 'checked' : '';
+if (!function_exists('isChecked')) {
+  function isChecked(array $arr, $val): string {
+    return in_array((string)$val, array_map('strval',$arr), true) ? 'checked' : '';
+  }
 }
 
-/* A small helper to render the filter form (used twice: desktop + mobile) */
-function render_filters($schools, $school_ids, $level_ui, $level_keys, $file_types, $min_rs, $max_rs, $sort) { ?>
-  <form class="bg-card border border-border rounded-lg p-6" method="get">
-    <h2 class="text-lg font-medium text-foreground mb-4">Filters</h2>
-    <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
-    <input type="hidden" name="page" value="1">
+/** Unique helper to avoid collisions with helpers.php */
+if (!function_exists('sb_preserve_get_inputs')) {
+  function sb_preserve_get_inputs(array $exclude = ['q','page']) {
+    foreach ($_GET as $k => $v) {
+      if (in_array($k, $exclude, true)) continue;
+      if (is_array($v)) {
+        foreach ($v as $vv) {
+          echo '<input type="hidden" name="'.htmlspecialchars($k).'[]" value="'.htmlspecialchars($vv).'">' . "\n";
+        }
+      } else {
+        echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">' . "\n";
+      }
+    }
+  }
+}
 
-    <!-- School -->
-    <div class="mb-6">
-      <h3 class="text-sm font-medium text-foreground mb-3">School</h3>
-      <div class="space-y-2">
-        <?php foreach ($schools as $s): ?>
-          <?php $isSelected = isChecked($school_ids, $s['id']); ?>
-          <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
-            <span><?= htmlspecialchars($s['name']) ?></span>
-            <input type="checkbox" name="school[]" value="<?= (int)$s['id'] ?>" class="sr-only filter-checkbox" <?= $isSelected ?>>
+/* Filters form (used in desktop + mobile) */
+if (!function_exists('render_filters_materials')) {
+  function render_filters_materials($schools, $school_ids, $level_ui, $level_keys, $file_types, $min_rs, $max_rs, $sort, $q) { ?>
+    <form class="bg-card border border-border rounded-lg p-6" method="get">
+      <h2 class="text-lg font-medium text-foreground mb-4">Filters</h2>
+      <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
+      <input type="hidden" name="page" value="1">
+      <?php if ($q !== ''): ?>
+        <input type="hidden" name="q" value="<?= htmlspecialchars($q) ?>">
+      <?php endif; ?>
+
+      <!-- School -->
+      <div class="mb-6">
+        <h3 class="text-sm font-medium text-foreground mb-3">School</h3>
+        <div class="space-y-2">
+          <?php foreach ($schools as $s): ?>
+            <?php $isSelected = isChecked($school_ids, $s['id']); ?>
+            <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
+              <span><?= htmlspecialchars($s['name']) ?></span>
+              <input type="checkbox" name="school[]" value="<?= (int)$s['id'] ?>" class="sr-only filter-checkbox" <?= $isSelected ?>>
+            </label>
+          <?php endforeach; ?>
+        </div>
+      </div>
+
+      <!-- Level -->
+      <div class="mb-6">
+        <h3 class="text-sm font-medium text-foreground mb-3">Level</h3>
+        <div class="space-y-2">
+          <?php foreach ($level_ui as $L): ?>
+            <?php $isSelected = isCheckedKey($level_keys, $L['key']); ?>
+            <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
+              <span><?= htmlspecialchars($L['label']) ?></span>
+              <input type="checkbox" name="level[]" value="<?= $L['key'] ?>" class="sr-only filter-checkbox" <?= $isSelected ?>>
+            </label>
+          <?php endforeach; ?>
+        </div>
+      </div>
+
+      <!-- Price -->
+      <div class="mb-6">
+        <h3 class="text-sm font-medium text-foreground mb-3">Price Range (LKR)</h3>
+        <div class="flex items-center space-x-2">
+          <input type="number" step="0.01" min="0" name="min" value="<?= $min_rs!==null?htmlspecialchars($min_rs):'' ?>"
+                 class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Min">
+          <span class="text-muted-foreground">-</span>
+          <input type="number" step="0.01" min="0" name="max" value="<?= $max_rs!==null?htmlspecialchars($max_rs):'' ?>"
+                 class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Max">
+        </div>
+      </div>
+
+      <!-- File Type -->
+      <div class="mb-6">
+        <h3 class="text-sm font-medium text-foreground mb-3">File Type</h3>
+        <?php $ftAll = ['pdf'=>'PDF','doc'=>'DOC','docx'=>'DOCX','ppt'=>'PPT','pptx'=>'PPTX'];
+        foreach ($ftAll as $k=>$lbl): ?>
+          <?php $isSelected = in_array($k,$file_types,true); ?>
+          <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer mb-2 transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
+            <span><?= $lbl ?></span>
+            <input type="checkbox" name="ft[]" value="<?= $k ?>" class="sr-only filter-checkbox" <?= $isSelected ? 'checked' : '' ?>>
           </label>
         <?php endforeach; ?>
       </div>
-    </div>
 
-    <!-- Level -->
-    <div class="mb-6">
-      <h3 class="text-sm font-medium text-foreground mb-3">Level</h3>
-      <div class="space-y-2">
-        <?php foreach ($level_ui as $L): ?>
-          <?php $isSelected = isCheckedKey($level_keys, $L['key']); ?>
-          <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
-            <span><?= htmlspecialchars($L['label']) ?></span>
-            <input type="checkbox" name="level[]" value="<?= $L['key'] ?>" class="sr-only filter-checkbox" <?= $isSelected ?>>
-          </label>
-        <?php endforeach; ?>
-      </div>
-    </div>
-
-    <!-- Price -->
-    <div class="mb-6">
-      <h3 class="text-sm font-medium text-foreground mb-3">Price Range (LKR)</h3>
-      <div class="flex items-center space-x-2">
-        <input type="number" step="0.01" min="0" name="min" value="<?= $min_rs!==null?htmlspecialchars($min_rs):'' ?>"
-               class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Min">
-        <span class="text-muted-foreground">-</span>
-        <input type="number" step="0.01" min="0" name="max" value="<?= $max_rs!==null?htmlspecialchars($max_rs):'' ?>"
-               class="w-full px-3 py-2 border border-input rounded-md text-sm focus:ring-2 focus:ring-ring focus:border-ring" placeholder="Max">
-      </div>
-    </div>
-
-    <!-- File Type -->
-    <div class="mb-6">
-      <h3 class="text-sm font-medium text-foreground mb-3">File Type</h3>
-      <?php $ftAll = ['pdf'=>'PDF','doc'=>'DOC','docx'=>'DOCX','ppt'=>'PPT','pptx'=>'PPTX'];
-      foreach ($ftAll as $k=>$lbl): ?>
-        <?php $isSelected = in_array($k,$file_types,true); ?>
-        <label class="filter-option flex items-center justify-between w-full p-2 text-sm font-medium border rounded-lg cursor-pointer mb-2 transition-colors <?= $isSelected ? 'bg-green-100 border-green-300 text-green-800' : 'text-foreground/80 border-border hover:bg-muted' ?>">
-          <span><?= $lbl ?></span>
-          <input type="checkbox" name="ft[]" value="<?= $k ?>" class="sr-only filter-checkbox" <?= $isSelected ? 'checked' : '' ?>>
-        </label>
-      <?php endforeach; ?>
-    </div>
-
-    <button class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
-      Apply Filters
-    </button>
-    <button type="button"
-            onclick="window.location.href='materials.php'"
-            class="w-full mt-2 bg-muted text-foreground py-2 px-4 rounded-md hover:bg-muted-foreground/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
-      Remove Filters
-    </button>
-  </form>
-<?php }
+      <button class="w-full bg-primary text-white py-2 px-4 rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
+        Apply Filters
+      </button>
+      <button type="button"
+              onclick="window.location.href='materials.php'"
+              class="w-full mt-2 bg-muted text-foreground py-2 px-4 rounded-md hover:bg-muted-foreground/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring">
+        Remove Filters
+      </button>
+    </form>
+  <?php }
+}
 
 include __DIR__ . '/header.php';
 ?>
@@ -206,19 +242,39 @@ include __DIR__ . '/header.php';
 
     <div class="flex flex-col lg:flex-row gap-6">
       <!-- Desktop Filters (visible ≥ lg) -->
-      <aside class="w-full lg:w-1/4 hidden lg:block">
-        <?php render_filters($schools,$school_ids,$level_ui,$level_keys,$file_types,$min_rs,$max_rs,$sort); ?>
+      <aside class=" w-full lg:w-1/4 hidden lg:block">
+        <?php render_filters_materials($schools,$school_ids,$level_ui,$level_keys,$file_types,$min_rs,$max_rs,$sort,$q); ?>
       </aside>
 
       <!-- Results -->
       <section class="w-full lg:w-3/4">
         <div class="bg-card border border-border rounded-lg p-4 mb-6">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+            <!-- Left: title + count -->
             <div>
               <h2 class="text-xl font-bold text-foreground">Study Materials</h2>
               <p class="text-sm text-muted-foreground">Showing <?= count($notes) ?> of <?= $total ?> results</p>
             </div>
+
+            <!-- Middle: search -->
             <div>
+              <form method="get" class="flex">
+                <?php sb_preserve_get_inputs(); ?>
+                <input
+                  type="search"
+                  name="q"
+                  value="<?= htmlspecialchars($q) ?>"
+                  placeholder="Search by title, description, module, or school…"
+                  class="flex-1 px-3 py-2 border border-input rounded-l-md text-sm focus:ring-2 focus:ring-ring focus:border-ring"
+                />
+                <button
+                  class="px-4 py-2 text-sm bg-primary text-white rounded-r-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring"
+                >Search</button>
+              </form>
+            </div>
+
+            <!-- Right: sort -->
+            <div class="md:justify-self-end">
               <select id="sortSelect" class="block w-full pl-3 pr-10 py-2 text-sm border border-input focus:outline-none focus:ring-ring focus:border-ring rounded-md">
                 <option value="newest" <?= $sort === 'newest' ? 'selected' : '' ?>>Sort by: Newest</option>
                 <option value="price_asc" <?= $sort === 'price_asc' ? 'selected' : '' ?>>Price: Low to High</option>
@@ -227,6 +283,12 @@ include __DIR__ . '/header.php';
             </div>
           </div>
         </div>
+
+        <?php if ($q !== ''): ?>
+          <p class="text-sm text-muted-foreground mb-2">
+            Search: <span class="font-medium text-foreground">"<?= htmlspecialchars($q) ?>"</span>
+          </p>
+        <?php endif; ?>
 
         <!-- Materials Grid -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -292,7 +354,7 @@ include __DIR__ . '/header.php';
             </p>
             <span class="text-sm text-muted-foreground">•</span>
             <p class="text-sm text-muted-foreground">
-              Showing <?= min($per, $total - (($page - 1) * $per)) ?> of <?= $total ?> results
+              Showing <?= $total ? min($per, max(0, $total - (($page - 1) * $per))) : 0 ?> of <?= $total ?> results
             </p>
           </div>
 
@@ -306,17 +368,18 @@ include __DIR__ . '/header.php';
 
 <!-- Mobile Filter Drawer -->
 <div id="filterDrawer" class="fixed inset-0 z-50 hidden">
-  <!-- overlay -->
+  <!-- overlay (clicking it resets to clean page) -->
   <div id="filterOverlay" class="absolute inset-0 bg-black/40"></div>
   <!-- panel -->
   <div class="absolute left-0 top-0 h-full w-11/12 max-w-sm bg-white shadow-xl p-4 overflow-y-auto">
     <div class="flex items-center justify-between mb-2">
       <h3 class="text-lg font-semibold">Filters</h3>
-      <button id="closeFilters" class="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted">
+      <!-- Cross button: reset filters to original page -->
+      <button id="closeFilters" type="button" class="inline-flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted">
         <i class="fas fa-times"></i>
       </button>
     </div>
-    <?php render_filters($schools,$school_ids,$level_ui,$level_keys,$file_types,$min_rs,$max_rs,$sort); ?>
+    <?php render_filters_materials($schools,$school_ids,$level_ui,$level_keys,$file_types,$min_rs,$max_rs,$sort,$q); ?>
   </div>
 </div>
 
@@ -349,17 +412,32 @@ include __DIR__ . '/header.php';
   wireFilterLabels(document.getElementById('filterDrawer')); // mobile
 
   // Mobile drawer open/close
-  const drawer = document.getElementById('filterDrawer');
+  const drawer  = document.getElementById('filterDrawer');
   const openBtn = document.getElementById('openFilters');
-  const closeBtn = document.getElementById('closeFilters');
+  const closeBtn= document.getElementById('closeFilters');
   const overlay = document.getElementById('filterOverlay');
 
-  function openFilters(){ drawer.classList.remove('hidden'); document.body.style.overflow='hidden'; }
-  function closeFilters(){ drawer.classList.add('hidden'); document.body.style.overflow=''; }
+  function openFilters(){
+    drawer.classList.remove('hidden');
+    document.body.style.overflow='hidden';
+  }
+
+  // Always navigate to the same page WITHOUT any query string
+function resetToCleanPage(){
+  location.replace('/StudyBuddy/pages/materials.php');
+}
+
 
   openBtn?.addEventListener('click', openFilters);
-  closeBtn?.addEventListener('click', closeFilters);
-  overlay?.addEventListener('click', closeFilters);
+  closeBtn?.addEventListener('click', resetToCleanPage);
+  overlay?.addEventListener('click', resetToCleanPage);
+
+  // Optional: ESC key clears filters when drawer is open
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !drawer.classList.contains('hidden')) {
+      resetToCleanPage();
+    }
+  });
 </script>
 
 <?php include __DIR__ . '/footer.php'; ?>

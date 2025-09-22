@@ -180,3 +180,17 @@ if (!function_exists('fee_5pct')) {
     return (int) round($base_cents * 0.05);
   }
 }
+
+function hidden_inputs_from_current_get(array $exclude = ['q','page']) {
+  foreach ($_GET as $k => $v) {
+    if (in_array($k, $exclude, true)) continue;
+    if (is_array($v)) {
+      foreach ($v as $vv) {
+        echo '<input type="hidden" name="'.htmlspecialchars($k).'[]" value="'.htmlspecialchars($vv).'">' . "\n";
+      }
+    } else {
+      echo '<input type="hidden" name="'.htmlspecialchars($k).'" value="'.htmlspecialchars($v).'">' . "\n";
+    }
+  }
+}
+

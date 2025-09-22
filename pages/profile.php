@@ -103,20 +103,20 @@ include 'header.php';
           <input type="hidden" name="action" value="update_profile">
 
           <div>
-            <label class="block text-sm font-medium text-muted-foreground mb-1">Full Name</label>
-            <input type="text" name="full_name" value="<?= htmlspecialchars($u['full_name'] ?? '') ?>"
+            <label class="block text-sm font-medium text-muted-foreground mb-1" for="prof_fullname">Full Name</label>
+            <input id="prof_fullname" type="text" name="full_name" value="<?= htmlspecialchars($u['full_name'] ?? '') ?>"
                    class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring">
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-muted-foreground mb-1">Email</label>
-            <input type="email" value="<?= htmlspecialchars($u['email'] ?? '') ?>" disabled
+            <label class="block text-sm font-medium text-muted-foreground mb-1" for="prof_email">Email</label>
+            <input id="prof_email" type="email" value="<?= htmlspecialchars($u['email'] ?? '') ?>" disabled
                    class="w-full px-4 py-2 border border-input rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed">
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-muted-foreground mb-1">Phone</label>
-            <input type="tel" name="phone" value="<?= htmlspecialchars($u['phone'] ?? '') ?>"
+            <label class="block text-sm font-medium text-muted-foreground mb-1" for="prof_phone">Phone</label>
+            <input id="prof_phone" type="tel" name="phone" value="<?= htmlspecialchars($u['phone'] ?? '') ?>"
                    class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
                    placeholder="+94 71 234 5678">
           </div>
@@ -135,22 +135,55 @@ include 'header.php';
           <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
           <input type="hidden" name="action" value="change_password">
 
+          <!-- Current password -->
           <div>
-            <label class="block text-sm font-medium text-muted-foreground mb-1">Current Password</label>
-            <input type="password" name="current_password"
-                   class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring">
+            <label class="block text-sm font-medium text-muted-foreground mb-1" for="cur_pass">Current Password</label>
+            <div class="relative">
+              <input id="cur_pass" type="password" name="current_password" autocomplete="current-password"
+                     class="w-full px-4 py-2 pr-10 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                     placeholder="••••••••">
+              <div class="absolute inset-y-0 right-2 flex items-center">
+                <button type="button"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                        data-password-toggle="cur_pass" aria-label="Show password" aria-pressed="false">
+                  <i class="fas fa-eye text-muted-foreground"></i>
+                </button>
+              </div>
+            </div>
           </div>
 
+          <!-- New password -->
           <div>
-            <label class="block text-sm font-medium text-muted-foreground mb-1">New Password</label>
-            <input type="password" name="new_password"
-                   class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring">
+            <label class="block text-sm font-medium text-muted-foreground mb-1" for="new_pass">New Password</label>
+            <div class="relative">
+              <input id="new_pass" type="password" name="new_password" autocomplete="new-password"
+                     class="w-full px-4 py-2 pr-10 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                     placeholder="At least 6 characters">
+              <div class="absolute inset-y-0 right-2 flex items-center">
+                <button type="button"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                        data-password-toggle="new_pass" aria-label="Show password" aria-pressed="false">
+                  <i class="fas fa-eye text-muted-foreground"></i>
+                </button>
+              </div>
+            </div>
           </div>
 
+          <!-- Confirm new password -->
           <div>
-            <label class="block text-sm font-medium text-muted-foreground mb-1">Confirm New Password</label>
-            <input type="password" name="confirm_password"
-                   class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring">
+            <label class="block text-sm font-medium text-muted-foreground mb-1" for="new_pass2">Confirm New Password</label>
+            <div class="relative">
+              <input id="new_pass2" type="password" name="confirm_password" autocomplete="new-password"
+                     class="w-full px-4 py-2 pr-10 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                     placeholder="Repeat new password">
+              <div class="absolute inset-y-0 right-2 flex items-center">
+                <button type="button"
+                        class="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                        data-password-toggle="new_pass2" aria-label="Show password" aria-pressed="false">
+                  <i class="fas fa-eye text-muted-foreground"></i>
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="flex justify-end">
@@ -161,5 +194,38 @@ include 'header.php';
     </div>
   </div>
 </main>
+
+<!-- Password Show/Hide: attaches to any button with [data-password-toggle] -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-password-toggle]').forEach(function(btn){
+      const inputId = btn.getAttribute('data-password-toggle');
+      const input   = document.getElementById(inputId);
+      if (!input) return;
+
+      const icon = btn.querySelector('i');
+      const setState = (show) => {
+        input.type = show ? 'text' : 'password';
+        btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+        btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        if (icon) {
+          icon.classList.toggle('fa-eye', !show);
+          icon.classList.toggle('fa-eye-slash', show);
+        }
+      };
+
+      setState(false); // start hidden
+
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        const showing = input.type === 'text';
+        const pos = input.selectionStart; // keep caret position if supported
+        setState(!showing);
+        input.focus();
+        try { input.setSelectionRange(pos, pos); } catch(_) {}
+      });
+    });
+  });
+</script>
 
 <?php include 'footer.php'; ?>

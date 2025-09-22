@@ -247,4 +247,40 @@ function navClasses($file, $current) {
       });
     }
   })();
+
+  <script>
+// Reusable password toggler
+document.addEventListener('DOMContentLoaded', function () {
+  // Attach to any button with data-password-toggle
+  document.querySelectorAll('[data-password-toggle]').forEach(function(btn){
+    const inputId = btn.getAttribute('data-password-toggle');
+    const input   = document.getElementById(inputId);
+    if (!input) return;
+
+    // Set initial ARIA and icon state
+    const icon = btn.querySelector('i');
+    const setState = (show) => {
+      input.type = show ? 'text' : 'password';
+      btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      if (icon) {
+        icon.classList.toggle('fa-eye', !show);
+        icon.classList.toggle('fa-eye-slash', show);
+      }
+    };
+
+    setState(false); // default hidden
+
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      const showing = input.type === 'text';
+      const pos = input.selectionStart; // keep caret position
+      setState(!showing);
+      // restore focus/caret for nicer UX
+      input.focus();
+      try { input.setSelectionRange(pos, pos); } catch(_) {}
+    });
+  });
+});
 </script>
+
