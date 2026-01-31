@@ -5,7 +5,7 @@ require_once __DIR__ . '/../config/helpers.php';
 // Which tab to show initially
 $activeTab = isset($_GET['tab']) && $_GET['tab'] === 'register' ? 'register' : 'login';
 
-// --- helper for tab classes (you were using this in the markup) ---
+// --- helper for tab classes ---
 function tabClass($isActive) {
   return $isActive
     ? 'py-2 px-4 font-medium text-primary border-b-2 border-primary focus:outline-none'
@@ -33,16 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($u['is_blocked'])) {
           flash('err', 'Your account is blocked. Please contact admin.');
         } else {
-          // Only store the user id in session
           $_SESSION['uid'] = $u['id'];
-
-          // Where to send them after login (adjust if you like)
-          if ($u['role'] === 'admin') {
-          header('Location: admin_dashboard.php');
-        } else {
-          header('Location: dashboard.php');
-        }
-        exit;
+          $to = get_return_to($u['role'] === 'admin' ? 'admin_dashboard.php' : 'dashboard.php');
+          safe_redirect($to);
         }
       } else {
         flash('err', 'Invalid credentials.');
@@ -57,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email     = trim($_POST['reg_email'] ?? '');
     $password  = $_POST['reg_password'] ?? '';
     $confirm   = $_POST['reg_confirm'] ?? '';
-    $phone     = trim($_POST['phone'] ?? ''); // optional in your UI
+    $phone     = trim($_POST['phone'] ?? '');
 
     if (!$full_name || !filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 6 || $password !== $confirm) {
       flash('err', 'Fill all fields correctly. Password must be ≥ 6 and match.');
@@ -68,7 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('ok', 'Account created! Please login.');
         $activeTab = 'login';
       } catch (PDOException $e) {
-        // likely duplicate email
         flash('err', 'That email is already registered.');
       }
     }
@@ -140,7 +132,7 @@ $title = "Login / Register - StudyBuddy APIIT";
         </div>
       <?php endif; ?>
       <?php if ($m = flash('err')): ?>
-        <div class="mb-4 p-3 rounded-md bg-red-100 text-red-800 border border-red-200">
+        <div class="mb-4 p-3 rounded-md bg-red-100 text-red-800 border border-emerald-200">
           <?= htmlspecialchars($m) ?>
         </div>
       <?php endif; ?>
@@ -155,15 +147,32 @@ $title = "Login / Register - StudyBuddy APIIT";
       <form id="loginForm" class="space-y-4 <?= $activeTab==='login' ? '' : 'hidden'; ?>" method="post" action="">
         <input type="hidden" name="csrf" value="<?= csrf_token(); ?>">
         <input type="hidden" name="__action" value="login">
+        <input type="hidden" name="redirect" value="<?= htmlspecialchars($_GET['redirect'] ?? '') ?>">
 
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Email</label>
-          <input name="email" type="email" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" placeholder="you@apiit.lk" required />
+          <label class="block text-sm font-medium text-foreground mb-1" for="login_email">Email</label>
+          <input id="login_email" name="email" type="email" autocomplete="username"
+                 class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                 placeholder="you@apiit.lk" required />
         </div>
+
+        <!-- Password with show/hide -->
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Password</label>
-          <input name="password" type="password" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" placeholder="••••••••" required />
+          <label class="block text-sm font-medium text-foreground mb-1" for="login_password">Password</label>
+          <div class="relative">
+            <input id="login_password" name="password" type="password" autocomplete="current-password"
+                   class="w-full px-4 py-2 pr-10 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                   placeholder="••••••••" required />
+            <div class="absolute inset-y-0 right-2 flex items-center">
+              <button type="button"
+                      class="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                      data-password-toggle="login_password" aria-label="Show password" aria-pressed="false">
+                <i class="fas fa-eye text-muted-foreground"></i>
+              </button>
+            </div>
+          </div>
         </div>
+
         <div class="flex items-center justify-between">
           <label class="flex items-center gap-2">
             <input type="checkbox" class="h-4 w-4 text-primary focus:ring-ring border-input rounded"/>
@@ -182,25 +191,60 @@ $title = "Login / Register - StudyBuddy APIIT";
         <input type="hidden" name="__action" value="register">
 
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Full Name</label>
-          <input name="full_name" type="text" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" placeholder="John Doe" required />
+          <label class="block text-sm font-medium text-foreground mb-1" for="reg_fullname">Full Name</label>
+          <input id="reg_fullname" name="full_name" type="text"
+                 class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                 placeholder="John Doe" required />
         </div>
+
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Email</label>
-          <input name="reg_email" type="email" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" placeholder="you@apiit.lk" required />
+          <label class="block text-sm font-medium text-foreground mb-1" for="reg_email">Email</label>
+          <input id="reg_email" name="reg_email" type="email" autocomplete="username"
+                 class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                 placeholder="you@apiit.lk" required />
         </div>
+
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Phone Number</label>
-          <input name="phone" type="tel" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" placeholder="+94 123 456 789" />
+          <label class="block text-sm font-medium text-foreground mb-1" for="reg_phone">Phone Number</label>
+          <input id="reg_phone" name="phone" type="tel"
+                 class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                 placeholder="+94 123 456 789" />
         </div>
+
+        <!-- New password with show/hide -->
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Password</label>
-          <input name="reg_password" type="password" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" placeholder="••••••••" required />
+          <label class="block text-sm font-medium text-foreground mb-1" for="reg_password">Password</label>
+          <div class="relative">
+            <input id="reg_password" name="reg_password" type="password" autocomplete="new-password"
+                   class="w-full px-4 py-2 pr-10 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                   placeholder="At least 6 characters" required />
+            <div class="absolute inset-y-0 right-2 flex items-center">
+              <button type="button"
+                      class="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                      data-password-toggle="reg_password" aria-label="Show password" aria-pressed="false">
+                <i class="fas fa-eye text-muted-foreground"></i>
+              </button>
+            </div>
+          </div>
         </div>
+
+        <!-- Confirm password with show/hide -->
         <div>
-          <label class="block text-sm font-medium text-foreground mb-1">Confirm Password</label>
-          <input name="reg_confirm" type="password" class="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring" placeholder="••••••••" required />
+          <label class="block text-sm font-medium text-foreground mb-1" for="reg_confirm">Confirm Password</label>
+          <div class="relative">
+            <input id="reg_confirm" name="reg_confirm" type="password" autocomplete="new-password"
+                   class="w-full px-4 py-2 pr-10 border border-input rounded-lg focus:ring-2 focus:ring-ring focus:border-ring"
+                   placeholder="Repeat new password" required />
+            <div class="absolute inset-y-0 right-2 flex items-center">
+              <button type="button"
+                      class="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring"
+                      data-password-toggle="reg_confirm" aria-label="Show password" aria-pressed="false">
+                <i class="fas fa-eye text-muted-foreground"></i>
+              </button>
+            </div>
+          </div>
         </div>
+
         <button type="submit" class="w-full bg-primary text-white py-2 px-4 rounded-lg hover:bg-primary/90 transition duration-200 font-medium">
           Register
         </button>
@@ -230,15 +274,45 @@ $title = "Login / Register - StudyBuddy APIIT";
       registerForm.classList.toggle('hidden', isLogin);
       setTabStyles(isLogin);
 
-      // keep tab in URL on refresh
       const url = new URL(window.location);
       url.searchParams.set('tab', tab);
       history.replaceState({}, '', url);
     }
 
-    // initial tab from PHP
     showTab('<?= $activeTab ?>');
+  </script>
+
+  <!-- Reusable Password Show/Hide -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('[data-password-toggle]').forEach(function(btn){
+        const inputId = btn.getAttribute('data-password-toggle');
+        const input   = document.getElementById(inputId);
+        if (!input) return;
+
+        const icon = btn.querySelector('i');
+        const setState = (show) => {
+          input.type = show ? 'text' : 'password';
+          btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+          btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+          if (icon) {
+            icon.classList.toggle('fa-eye', !show);
+            icon.classList.toggle('fa-eye-slash', show);
+          }
+        };
+
+        setState(false);
+
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          const showing = input.type === 'text';
+          const pos = input.selectionStart;
+          setState(!showing);
+          input.focus();
+          try { input.setSelectionRange(pos, pos); } catch(_) {}
+        });
+      });
+    });
   </script>
 </body>
 </html>
-

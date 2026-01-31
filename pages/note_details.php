@@ -1,15 +1,68 @@
 <?php
+// pages/note_detail.php
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/helpers.php';
-
 
 $note_id = (int)($_GET['id'] ?? 0);
 if ($note_id <= 0) { http_response_code(404); exit('Note not found.'); }
 
+/* ------------------ Robust path helpers ------------------ */
+
+// App base web path like "/StudyBuddy" (project root = pages/..)
+function app_base_web(): string {
+  $docRootFs = rtrim(str_replace('\\','/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
+  $projectFs = rtrim(str_replace('\\','/', realpath(__DIR__ . '/..') ?: ''), '/'); // StudyBuddy
+  $suffix    = substr($projectFs, strlen($docRootFs));    // "/StudyBuddy" (or "")
+  if ($suffix === false) $suffix = '';
+  $base = '/' . ltrim($suffix, '/');
+  return $base === '//' ? '/' : $base;
+}
+
+/**
+ * Convert anything (absolute FS path / web path / relative) into a proper web URL.
+ * Accepts:
+ *  - "uploads/..."                                (relative)
+ *  - "/uploads/..." or "/StudyBuddy/uploads/..."  (web path)
+ *  - "C:\xampp\htdocs\StudyBuddy\...\uploads\..." (Windows abs path)
+ *  - "/var/www/html/StudyBuddy/uploads/..."       (Unix abs path)
+ *  - "http(s)://..."                               (left as-is)
+ */
+function to_web_path(string $p): string {
+  $p = trim($p);
+  if ($p === '') return '';
+  $p = str_replace('\\','/',$p);
+
+  // Full URL? keep it.
+  if (preg_match('#^https?://#i', $p)) return $p;
+
+  $base = app_base_web(); // e.g. "/StudyBuddy" or "/"
+
+  // Already root-relative web path
+  if ($p[0] === '/') return $p;
+
+  // Absolute FS path containing "/uploads/..." -> collapse to web under app base
+  if (preg_match('#/(uploads/.+)$#i', $p, $m)) {
+    return rtrim($base, '/') . '/' . $m[1];
+  }
+  // Absolute FS path containing "/previews/..." -> ensure it sits under /uploads/previews/...
+  if (preg_match('#/(previews/.+)$#i', $p, $m)) {
+    return rtrim($base, '/') . '/uploads/' . $m[1];
+  }
+
+  // Relative forms:
+  if (stripos($p, 'uploads/') === 0)  return rtrim($base, '/') . '/' . $p;
+  if (stripos($p, 'previews/') === 0) return rtrim($base, '/') . '/uploads/' . $p;
+
+  // Anything else: relative to app base
+  return rtrim($base, '/') . '/' . ltrim($p, '/');
+}
+
+/* ------------------ Fetch note ------------------ */
 $sql = "
   SELECT
     n.id, n.title, n.description, n.file_path, n.price_cents, n.created_at, n.is_approved,
-    u.id   AS seller_id, u.full_name AS seller_name,
+    n.preview_image_1, n.preview_image_2, n.preview_image_3,
+    u.id   AS seller_id, u.full_name AS seller_name, u.created_at AS seller_since,
     m.id   AS module_id, m.title     AS module_title,
     l.id   AS level_id,  l.name      AS level_name,
     s.id   AS school_id, s.name      AS school_name,
@@ -26,68 +79,52 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute([$note_id]);
 $note = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if (!$note) {
-  http_response_code(404);
-  exit('Note not found.');
-}
+if (!$note) { http_response_code(404); exit('Note not found.'); }
 
-/* ===================== Pricing ===================== */
+/* ------------------ Pricing ------------------ */
 $price_cents = (int)$note['price_cents'];
 $fee_cents   = fee_5pct($price_cents);       // 5% platform fee
-$total_cents = $price_cents + $fee_cents;    // buyer pays price + fee
+$total_cents = $price_cents + $fee_cents;
 
 $price_rs = number_format($price_cents / 100, 2);
 $fee_rs   = number_format($fee_cents   / 100, 2);
 $total_rs = number_format($total_cents / 100, 2);
 
-/* ===================== File URL & Existence ===================== */
-$raw_fp = trim((string)($note['file_path'] ?? ''));
+/* ------------------ File URL (if you ever link it) ------------------ */
+$raw_fp   = trim((string)($note['file_path'] ?? ''));
+$file_url = $raw_fp ? to_web_path($raw_fp) : '';
+$ext      = strtolower((string)($note['ext'] ?? ''));
 
-// Where uploads live on disk and on the web:
-$UPLOAD_DIR = realpath(__DIR__ . '/uploads');               // e.g. /.../pages/uploads
-$scriptDir  = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/'); // e.g. /NoteSharing/pages
-$UPLOAD_WEB = $scriptDir . '/uploads/';                     // e.g. /NoteSharing/pages/uploads/
-
-// Build the public URL:
-if ($raw_fp === '') {
-  $file_url = '';
-} elseif (preg_match('#^https?://#i', $raw_fp) || str_starts_with($raw_fp, '/')) {
-  $file_url = $raw_fp;
-} else {
-  $file_url = $UPLOAD_WEB . rawurlencode($raw_fp);
-}
-
-// Check file existence on disk
-$exists_on_disk = false;
-if ($raw_fp !== '' && is_dir($UPLOAD_DIR)) {
-  $disk_candidate = $UPLOAD_DIR . DIRECTORY_SEPARATOR . $raw_fp;
-  $exists_on_disk = file_exists($disk_candidate);
-}
-
-// Normalize extension (for info chips only)
-$ext = strtolower((string)($note['ext'] ?? ''));
-
-/* ===================== Preview Images (user-provided) ===================== */
-$preview_dir_disk = __DIR__ . "/uploads/previews/note_" . $note_id;
-$preview_dir_web  = $UPLOAD_WEB . "previews/note_" . $note_id . '/';
-
+/* ------------------ Preview Images ------------------ */
 $preview_images = [];
-if (is_dir($preview_dir_disk)) {
-  // load page1, page2, page3 if present (jpg/png/webp)
-  foreach ([1,2,3] as $i) {
-    foreach (['jpg','jpeg','png','webp'] as $imgExt) {
-      $fn = "page{$i}.{$imgExt}";
-      $disk = $preview_dir_disk . '/' . $fn;
-      if (is_file($disk)) {
-        $preview_images[] = $preview_dir_web . $fn;
-        break;
+foreach (['preview_image_1','preview_image_2','preview_image_3'] as $k) {
+  $v = trim((string)($note[$k] ?? ''));
+  if ($v !== '') $preview_images[] = to_web_path($v);
+}
+
+if (count($preview_images) === 0) {
+  // Fallback to /uploads/previews/note_{id}/page{1..3}.(jpg|jpeg|png|webp)
+  $baseWeb = app_base_web(); // e.g. "/StudyBuddy"
+  $preview_dir_disk = __DIR__ . "/uploads/previews/note_" . $note_id;
+  $preview_dir_web  = rtrim($baseWeb, '/') . "/uploads/previews/note_" . $note_id . '/';
+
+  if (is_dir($preview_dir_disk)) {
+    foreach ([1,2,3] as $i) {
+      foreach (['jpg','jpeg','png','webp'] as $imgExt) {
+        $fn = "page{$i}.{$imgExt}";
+        if (is_file($preview_dir_disk . '/' . $fn)) {
+          $preview_images[] = $preview_dir_web . $fn;
+          break;
+        }
       }
     }
   }
 }
-$CSRF = csrf_token();
 
-/* Page title for header */
+// Always show 3 panels — missing ones get the placeholder
+$defaultPreview = app_base_web() . '/assets/images/no-preview.png';
+
+$CSRF  = csrf_token();
 $title = "Note • " . htmlspecialchars($note['title']);
 include __DIR__ . '/header.php';
 ?>
@@ -170,30 +207,24 @@ include __DIR__ . '/header.php';
 
         <div class="p-6">
           <div id="preview" class="tab-content active">
-            <?php if (count($preview_images) === 3): ?>
-              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                <div class="flex items-center">
-                  <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
-                  <span class="text-sm text-yellow-800">Preview shows only the first 3 pages (as provided by the seller).</span>
-                </div>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <div class="flex items-center">
+                <i class="fas fa-info-circle text-yellow-600 mr-2"></i>
+                <span class="text-sm text-yellow-800">Preview shows seller-provided sample pages.</span>
               </div>
+            </div>
 
-              <div class="space-y-4">
-                <?php foreach ($preview_images as $i => $imgUrl): ?>
-                  <div class="border border-gray-200 rounded-lg overflow-hidden bg-white relative">
-                    <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs">Page <?= $i+1 ?></div>
-                    <div class="absolute top-2 right-2 bg-red-100 text-red-800 px-2 py-1 rounded text-xs">Preview Only</div>
-                    <img src="<?= htmlspecialchars($imgUrl) ?>" alt="Preview page <?= $i+1 ?>" class="w-full h-auto max-h-[38rem] object-contain select-none pointer-events-none">
-                  </div>
-                <?php endforeach; ?>
-              </div>
-            <?php else: ?>
-              <div class="border border-dashed border-gray-300 rounded-lg p-6 text-center">
-                <i class="fas fa-image text-4xl text-gray-400 mb-4"></i>
-                <p class="text-sm text-gray-600">No preview images were provided by the seller.</p>
-                <p class="text-xs text-gray-500 mt-1">Full document available after purchase.</p>
-              </div>
-            <?php endif; ?>
+            <div class="space-y-4">
+              <?php for ($i = 0; $i < 3; $i++):
+                $imgUrl = $preview_images[$i] ?? $defaultPreview;
+              ?>
+                <div class="border border-gray-200 rounded-lg overflow-hidden bg-white relative">
+                  <div class="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded text-xs">Page <?= $i+1 ?></div>
+                  <div class="absolute top-2 right-2 bg-red-100 text-red-800 px-2 py-1 rounded text-xs">Preview Only</div>
+                  <img src="<?= htmlspecialchars($imgUrl) ?>" alt="Preview page <?= $i+1 ?>" class="w-full h-auto max-h-[38rem] object-contain select-none pointer-events-none">
+                </div>
+              <?php endfor; ?>
+            </div>
           </div>
         </div>
       </div>
@@ -246,6 +277,7 @@ include __DIR__ . '/header.php';
         <p class="text-xs text-gray-500 mb-4">
           You pay the Material Price + Platform Fee. (The fee is deducted from the seller's payout.)
         </p>
+
         <?php if (is_logged_in()): ?>
           <button class="w-full bg-primary text-white py-3 px-4 rounded-md text-sm font-medium hover:bg-primary/90"
             onclick="showPurchaseModal()">Purchase Now</button>
@@ -255,7 +287,6 @@ include __DIR__ . '/header.php';
             Login to Purchase
           </a>
         <?php endif; ?>
-
 
         <form method="post" action="add_to_cart.php" class="mt-2">
           <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
@@ -332,30 +363,18 @@ async function completePurchase(){
 
     const res = await fetch('checkout.php', {
       method: 'POST',
-      headers: {
-        // Make it obvious we expect JSON (server will honor this)
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest'
-      },
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
       body
     });
 
-    // Read as text first to survive accidental HTML output
     const text = await res.text();
-
-    // Try to parse as JSON; if it fails, just go to My Purchases
     let data = null;
     try { data = JSON.parse(text); } catch (e) {
-      // Most likely HTML/PHP warning printed -> just redirect
       window.location.href = 'mypurchases.php?just_bought=1';
       return;
     }
 
-    if (!data.ok) {
-      alert('Purchase failed: ' + (data.error || 'Unknown error'));
-      return;
-    }
-
+    if (!data.ok) { alert('Purchase failed: ' + (data.error || 'Unknown error')); return; }
     window.location.href = data.redirect || 'mypurchases.php?just_bought=1';
   } catch (err) {
     alert('Purchase failed: ' + err.message);
@@ -364,6 +383,5 @@ async function completePurchase(){
   }
 }
 </script>
-
 
 <?php include __DIR__ . '/footer.php'; ?>
